@@ -8,3 +8,5 @@ To install:
   - cbsd initenv
 
   Refer to the documentation page: https://www.bsdstore.ru/en/12.x/wf_cpr_ssi.html
+
+  See build-sample/README.md for build sample

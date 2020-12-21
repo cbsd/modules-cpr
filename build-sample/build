@@ -1,0 +1,72 @@
+#!/bin/sh
+
+set -e
+
+err() {
+	exitval=$1
+	shift
+	echo "$*" 1>&2
+	exit $exitval
+}
+
+: ${distdir="/usr/local/cbsd"}
+# MAIN
+if [ -z "${workdir}" ]; then
+	[ -z "${cbsd_workdir}" ] && . /etc/rc.conf
+	[ -z "${cbsd_workdir}" ] && exit 0
+	workdir="${cbsd_workdir}"
+fi
+
+set -e
+. ${workdir}/cmd.subr
+. ${distdir}/cbsd.conf
+. ${distdir}/tools.subr
+. ${subr}
+set +e
+
+_MYDIR=$(dirname `realpath $0`)
+[ ! -f "${_MYDIR}/cpr.inc" ] && err 1 "Missed cpr.inc in ${_MYDIR}"
+. ${_MYDIR}/cpr.inc
+
+# MAIN()
+while getopts "a:b:v:m:n:r:c:p:s:" opt; do
+	case "${opt}" in
+		a) oarch="${OPTARG}" ;;
+		b) _BATCH="${OPTARG}" ;;
+		v) _VER="${OPTARG}" ;;
+		m) _MASTERLINK="${OPTARG}" ;;
+		n) _NEW="${OPTARG}" ;;
+		r) _REPOVERION="${OPTARG}" ;;
+		c) _MAKECONF="${OPTARG}" ;;
+		p) _PAUSE="1" ;;
+		s) STABLE="${OPTARG}" ;;
+		*)  usage ;;
+	esac
+	shift $(($OPTIND - 1))
+done
+
+[ -z "${_VER}" ] && err 1 "Give me version, e.g: -v 11.0"
+[ -z "${_MASTERLINK}" ] && err 1 "-m is mandatory"
+
+. ${_MYDIR}/build.inc
+_SLAVELINK="${_MASTERLINK}-slave"
+_MAKECONF="${_MASTERLINK}_make.conf"
+
+if [ ! -f "${_MAKECONF}" ]; then
+	printf "No such make conf ${_MAKECONF}. Sleep for 10 seconds if its ok or interrupt process"
+	for i in $( jot 10 ); do
+		sleep 1
+		printf "."
+	done
+	MAKECONFARG=""
+else
+	MAKECONFARG="makeconf=${_MYDIR}/${_MASTERLINK}_make.conf"
+fi
+
+_PATH="${_DOCROOTPKGBASE}/${arch}/${_VER}"
+[ ! -d "${_PATH}" ] && mkdir -p ${_PATH}
+ROOTDIR="${_PATH}/${_SLAVELINK}"
+[ ! -h "${ROOTDIR}" ] && ${_MYDIR}/swroot -v ${_VER} -m ${_MASTERLINK}
+cbsd cpr stable=${stable} batch=${_BATCH} pause=${_PAUSE} ver=${_VER} new=${_NEW} ccache=1 cdir=${workdir}/tmp/${_MASTERLINK}-${_VER} pkglist=${workdir}/tmp/${_MASTERLINK}-${_VER} pkglist=${_MYDIR}/${_MASTERLINK}.list dstdir=${ROOTDIR} repoversion=${_MASTERLINK} ${MAKECONFARG}
+
+echo "cdir=${workdir}/tmp/${_MASTERLINK}-${_VER} , dstdir=${ROOTDIR} repoversion=${_MASTERLINK}"

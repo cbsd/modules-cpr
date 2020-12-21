@@ -1,0 +1,3 @@
+# must be first
+/usr/ports/security/ca_root_nss
+/usr/ports/sysutils/cbsd
