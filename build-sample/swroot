@@ -20,7 +20,7 @@ fi
 set -e
 . ${workdir}/cmd.subr
 . ${distdir}/cbsd.conf
-. ${distdir}/tools.subr
+. ${subrdir}/tools.subr
 . ${subr}
 set +e
 

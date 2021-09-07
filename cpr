@@ -21,23 +21,32 @@ usegcc=path to gcc port\n"
 TRAP=""
 
 #defines
-_MYDIR=$( /usr/bin/dirname `/bin/realpath $0` )
+_MYDIR=$( ${DIRNAME_CMD} `${REALPATH_CMD} $0` )
 
 . ${subr}
 readconf buildworld.conf
 
+ver=
+over=
 . ${cbsdinit}
 
-. ${distccacheconf}
-. ${mailconf}
-. ${distdir}/universe.subr
+[ -n "${ver}" ] && over="${ver}"
 
-. ${buildconf}
+. ${subrdir}/distccache.subr
+. ${subrdir}/mailtools.subr
+. ${subrdir}/universe.subr
+. ${subrdir}/build.subr
+
+if [ -n "${over}" ]; then
+	ver="${over}"
+elif [ -z "${ver}" ]; then
+	ver=$( ${SYSCTL_CMD} -n kern.osrelease | ${CUT_CMD} -d - -f 1 )
+fi
 
 [ -z "${pause}" ] && pause=0
 [ -z "${batch}" ] && batch=0
 
-[ ! -r ${etcdir}/cpr.conf -a -r ${_MYDIR}/etc-sample/cpr.conf ] && /bin/cp ${_MYDIR}/etc-sample/cpr.conf ${etcdir}/cpr.conf
+[ ! -r ${etcdir}/cpr.conf -a -r ${_MYDIR}/etc-sample/cpr.conf ] && ${CP_CMD} ${_MYDIR}/etc-sample/cpr.conf ${etcdir}/cpr.conf
 
 show_tmux_session()
 {
@@ -46,14 +55,14 @@ show_tmux_session()
 	[ -z "${tmuxcmd}" ] && err 1 "${N1_COLOR}No such tmux${N0_COLOR}"
 
 	${ECHO} "${N1_COLOR}Active cpr session:${N0_COLOR}"
-	${tmuxcmd} list-sessions 2>/dev/null| /usr/bin/grep "\-cpr: " |cut -d : -f 1
+	${tmuxcmd} list-sessions 2>/dev/null | ${GREP_CMD} "\-cpr: " | ${CUT_CMD} -d : -f 1
 	exit 0
 }
 
 post_action()
 {
 	if [ -r ${data}/tmp/cpr_error ]; then
-		[ -r ${data}/tmp/build.log ] && /usr/bin/tail -n100 ${data}/tmp/build.log
+		[ -r ${data}/tmp/build.log ] && ${TAIL_CMD} -n100 ${data}/tmp/build.log
 		err 1 "${N1_COLOR}CPR failed. See log for detail: /tmp/build.log${N0_COLOR}"
 	fi
 
@@ -69,26 +78,26 @@ post_action()
 	chroot ${path} /bin/sh << EOF
 export PACKAGES=/packages
 
-for i in \$( /usr/sbin/pkg query %n-%v ); do
-	/usr/sbin/pkg create -n -g -f txz -o \${PACKAGES}/All/ \$i
+for i in \$( ${PKG_CMD} query %n-%v ); do
+	${PKG_CMD} create -n -g -f txz -o \${PACKAGES}/All/ \$i
 done
 
 cd \${PACKAGES}/All
-/bin/rm -f digests.txz packagesite.txz repo.txz
+${RM_CMD} -f digests.txz packagesite.txz repo.txz
 pkg repo .
 EOF
 
-	TRAP="${TRAP} /bin/rm -f ${LOCKFILE} ${_tmppkglist};"
+	TRAP="${TRAP} ${RM_CMD} -f ${LOCKFILE} ${_tmppkglist};"
 	trap "${TRAP}" HUP INT ABRT BUS TERM EXIT
 
-	DT_END=$( /bin/date +%s )
+	DT_END=$( ${DATE_CMD} +%s )
 	DT_DIFF=$(( DT_END - DT_START ))
 
 	if [ "${dstdir}" = "repo" ]; then
-		/usr/bin/find ${path}/packages/All -type f -name \*.txz -exec mv -f {} ${MYPKGDIR}/ \;
+		${FIND_CMD} ${path}/packages/All -type f -name \*.txz -exec ${MV_CMD} -f {} ${MYPKGDIR}/ \;
 		ROOTPKGDIR="${MYPKGDIR}"
 	else
-		/usr/bin/find ${path}/packages/All -type f -name \*.txz -exec cp -n {} ${MYPKGDIR}/ \;
+		${FIND_CMD} ${path}/packages/All -type f -name \*.txz -exec ${CP_CMD} -n {} ${MYPKGDIR}/ \;
 		bver=$( ${miscdir}/elf_tables --freebsdver ${path}/bin/sh )
 		bosname=$( ${miscdir}/elf_tables --osname ${path}/bin/sh )
 		barch=$( ${miscdir}/elf_tables --arch ${path}/bin/sh )
@@ -113,11 +122,11 @@ EOF
 
 		ROOTPKGDIR="${dstdir}/${bosname}:${bver}:${barch}"
 
-		[ -d "${ROOTPKGDIR}" ] && /bin/rm -rf ${ROOTPKGDIR}
-		mkdir -p ${ROOTPKGDIR}
+		[ -d "${ROOTPKGDIR}" ] && ${RM_CMD} -rf ${ROOTPKGDIR}
+		${MKDIR_CMD} -p ${ROOTPKGDIR}
 
-		echo "/bin/mv ${MYPKGDIR} ${ROOTPKGDIR}/All"
-		/bin/mv ${MYPKGDIR} ${ROOTPKGDIR}/All
+		echo "${MV_CMD} ${MYPKGDIR} ${ROOTPKGDIR}/All"
+		${MV_CMD} ${MYPKGDIR} ${ROOTPKGDIR}/All
 		#echo "ER"
 		#mkdir -p ${ROOTPKGDIR}
 		#echo "mv ${path}/packages/x ${ROOTPKGDIR}/"
@@ -127,17 +136,17 @@ EOF
 
 	# create pkg in symlinked /latest location (see pkg-repository(5))
 	cd ${ROOTPKGDIR}
-	/bin/ln -sf ./All ./latest
+	${LN_CMD} -sf ./All ./latest
 	cd ${ROOTPKGDIR}/All
-	/usr/bin/find ./ -type f -name pkg-[0-9]* -exec ln -sf {} ./pkg.txz \;
+	${FIND_CMD} ./ -type f -name pkg-[0-9]* -exec ${LN_CMD} -sf {} ./pkg.txz \;
 
 	# for some reason pkg <bootstrap/install> trying to get
 	# pkg from: <url>/FreeBSD:12:amd64/latest/Latest/pkg.txz
 
 	if [ -h ${ROOTPKGDIR}/All/pkg.txz ]; then
-		/bin/mkdir -p ${ROOTPKGDIR}/All/Latest
-		orig_pkg=$( /bin/realpath ${ROOTPKGDIR}/All/pkg.txz )
-		/bin/cp ${orig_pkg} ${ROOTPKGDIR}/All/Latest/pkg.txz
+		${MKDIR_CMD} -p ${ROOTPKGDIR}/All/Latest
+		orig_pkg=$( ${REALPATH_CMD} ${ROOTPKGDIR}/All/pkg.txz )
+		${CP_CMD} ${orig_pkg} ${ROOTPKGDIR}/All/Latest/pkg.txz
 	fi
 
 	jstop ${jname}
@@ -182,7 +191,7 @@ umount_temp_dirs()
 	#destroy md disk when he used
 	if [ "${CCACHEFS}" = "mdfs" -a -n "${MDDEV}" ]; then
 		${ECHO} "${N1_COLOR}Destroy md drive: ${N2_COLOR}${MDDEV}${N0_COLOR}"
-		/sbin/mdconfig -d -u ${MDDEV}
+		${MDCONFIG_CMD} -d -u ${MDDEV}
 	fi
 }
 
@@ -191,15 +200,15 @@ mount_temp_dirs()
 {
 	local _tmpfstab="${ftmpdir}/mount_temp_dirs.$$"
 
-	TRAP="${TRAP} /bin/rm -f ${_tmpfstab};"
+	TRAP="${TRAP} ${RM_CMD} -f ${_tmpfstab};"
 	trap "${TRAP}" HUP INT ABRT BUS TERM EXIT
 
-	[ ! -d "${PORTSCFG_SRC}" ] && /bin/mkdir -p ${PORTSCFG_SRC}
-	[ ! -d "${MYPKGDIR}" ] && /bin/mkdir -p ${MYPKGDIR}
+	[ ! -d "${PORTSCFG_SRC}" ] && ${MKDIR_CMD} -p ${PORTSCFG_SRC}
+	[ ! -d "${MYPKGDIR}" ] && ${MKDIR_CMD} -p ${MYPKGDIR}
 
-	[ ! -d "${data}/root/system" ] && /bin/mkdir -p ${data}/root/system
+	[ ! -d "${data}/root/system" ] && ${MKDIR_CMD} -p ${data}/root/system
 
-	/bin/cat >> ${_tmpfstab} << EOF
+	${CAT_CMD} >> ${_tmpfstab} << EOF
 procfs /proc procfs rw 0 0
 ${PORTSCFG_SRC} /var/db/ports ${NULLFS} rw 0 0
 ${MYPKGDIR} /tmp/packages ${NULLFS} rw 0 0
@@ -207,14 +216,14 @@ ${workdir}/jails-system/${jname} /root/system ${NULLFS} rw 0 0
 EOF
 
 	if [ ${ccache} -eq 1 -a -n "${ccache_dir_source}" ]; then
-		[ ! -d ${path}/root/.ccache ] && /bin/mkdir -p ${path}/root/.ccache
-		/bin/cat >> ${_tmpfstab} << EOF
+		[ ! -d ${path}/root/.ccache ] && ${MKDIR_CMD} -p ${path}/root/.ccache
+		${CAT_CMD} >> ${_tmpfstab} << EOF
 ${ccache_dir_source} /root/.ccache ${NULLFS} rw 0 0
 EOF
 	fi
 
 	mountfstab jroot=$path fstab=${_tmpfstab} jname="${jname}"
-	/bin/rm -f ${_tmpfstab}
+	${RM_CMD} -f ${_tmpfstab}
 }
 
 
@@ -227,34 +236,34 @@ prepare_chroot()
 	export NEEDEDPORTS
 
 	[ -n "${usegcc}" ] && export usegcc
-	[ -f "${makeconf}" ] && /bin/cp ${makeconf} ${path}/etc/make.conf
-	[ ! -r ${path}/etc/make.conf ] && /usr/bin/touch ${path}/etc/make.conf
-	[ "${batch}" = "1" ] && /usr/sbin/sysrc -qf ${path}/etc/make.conf BATCH=no
+	[ -f "${makeconf}" ] && ${CP_CMD} ${makeconf} ${path}/etc/make.conf
+	[ ! -r ${path}/etc/make.conf ] && ${TOUCH_CMD} ${path}/etc/make.conf
+	[ "${batch}" = "1" ] && ${SYSRC_CMD} -qf ${path}/etc/make.conf BATCH=no
 
 	# remove default pkg.conf
-	/bin/rm -f ${path}/etc/pkg/*.conf
+	${RM_CMD} -f ${path}/etc/pkg/*.conf
 
-	/bin/cp /etc/resolv.conf ${path}/etc
+	${CP_CMD} /etc/resolv.conf ${path}/etc
 
-	/usr/bin/touch ${path}/etc/src.conf
+	${TOUCH_CMD} ${path}/etc/src.conf
 
-	/usr/sbin/chroot $path /bin/sh << EOF
-/usr/sbin/service ldconfig start
-mv /etc/make.conf /tmp
-pkg info -e pkg || env WITH_PKG=devel env BATCH=no env WRKDIRPREFIX=/tmp make -C /usr/ports/ports-mgmt/pkg-devel clean install
-mv /tmp/make.conf /etc
+	${CHROOT_CMD} $path /bin/sh << EOF
+${SERVICE_CMD} ldconfig start
+${MV_CMD} /etc/make.conf /tmp
+${PKG_CMD} info -e pkg || env WITH_PKG=devel env BATCH=no env WRKDIRPREFIX=/tmp ${MAKE_CMD} -C /usr/ports/ports-mgmt/pkg-devel clean install
+${MV_CMD} /tmp/make.conf /etc
 # remove default pkg.conf
-[ -f "/usr/local/etc/pkg.conf" ] && rm -f /usr/local/etc/pkg.conf
-[ -d /tmp/usr/ports ] && /usr/bin/find /tmp/usr/ports -type d -name work -exec rm -rf {} \; > /dev/null 2>&1
+[ -f "/usr/local/etc/pkg.conf" ] && ${RM_CMD} -f /usr/local/etc/pkg.conf
+[ -d /tmp/usr/ports ] && ${FIND_CMD} /tmp/usr/ports -type d -name work -exec ${RM_CMD} -rf {} \; > /dev/null 2>&1
 
 if [ -n "\${usegcc}" ]; then
-	env BATCH=no make -C \$usegcc install
-	cp /etc/make.conf /tmp/mk.conf
-	grep -v USE_GCC /tmp/mk.conf > /etc/make.conf
+	env BATCH=no ${MAKE_CMD} -C \$usegcc install
+	${CP_CMD} /etc/make.conf /tmp/mk.conf
+	${GREP_CMD} -v USE_GCC /tmp/mk.conf > /etc/make.conf
 	echo USE_GCC=yes >> /etc/make.conf
 fi
 
-[ "${batch}" = "1" ] && /usr/sbin/sysrc -qf ${path}/etc/make.conf BATCH=no
+[ "${batch}" = "1" ] && ${SYSRC_CMD} -qf ${path}/etc/make.conf BATCH=no
 
 for i in \${NEEDEDPORTS}; do
 		PORTNAME=\$( make -C \$i -V PORTNAME )
@@ -281,8 +290,8 @@ init_ccachedir_for_chroot()
 {
 	ccache_dir_source="${dbdir}/ccache/ccache-${arch}-${ver}-${stable}"
 	${ECHO} "${N1_COLOR}Init ccache directory: ${N2_COLOR}${ccache_dir_source}${N1_COLOR}...${N0_COLOR}"
-	[ ! -d "${path}/root/.ccache" ] && /bin/mkdir -p ${path}/root/.ccache
-	[ ! -d "${ccache_dir_source}" ] && /bin/mkdir -p ${ccache_dir_source}
+	[ ! -d "${path}/root/.ccache" ] && ${MKDIR_CMD} -p ${path}/root/.ccache
+	[ ! -d "${ccache_dir_source}" ] && ${MKDIR_CMD} -p ${ccache_dir_source}
 }
 
 
@@ -314,21 +323,21 @@ fi
 
 if [ -d "${dstdir}" ]; then
 	if [ "${new}" = "1" -o "${append}" = "0" ]; then
-		A=$( /bin/ls -1 ${dstdir}/ |/usr/bin/wc -l |/usr/bin/awk '{ printf $1 }' )
-		[ "${A}" != "0" ] && ${ECHO} "${N1_COLOR}Warning: ${N2_COLOR}${dstdir}/${N1_COLOR} is not empty. Please clean before cpr initialization:${N0_COLOR}" && err 1 $( /bin/ls -1 ${dstdir} )
+		A=$( ${LS_CMD} -1 ${dstdir}/ | ${WC_CMD} -l | ${AWK_CMD} '{ printf $1 }' )
+		[ "${A}" != "0" ] && ${ECHO} "${N1_COLOR}Warning: ${N2_COLOR}${dstdir}/${N1_COLOR} is not empty. Please clean before cpr initialization:${N0_COLOR}" && err 1 $( ${LS_CMD} -1 ${dstdir} )
 	fi
 else
-	/bin/mkdir -p "${dstdir}"
+	${MKDIR_CMD} -p "${dstdir}"
 fi
 
-if [ $( /usr/bin/uname -m ) = "i386" -a "${arch}" = "amd64" ]; then
+if [ $( ${UNAME_CMD} -m ) = "i386" -a "${arch}" = "amd64" ]; then
 	err 1 "Cannot install amd64 base on i386 hosts"
 fi
 
 [ -z "${makeconf}" ] && makeconf="${_MYDIR}/cpr_make.conf"
 [ ! -f "${pkglist}" ] && err 1 "No pkglist file"
 
-tpl_md5=$( /sbin/md5 -qs ${pkglist} )
+tpl_md5=$( ${MD5_CMD} -qs ${pkglist} )
 md5_postfix=$( substr --pos=0 --len=5 --str=${tpl_md5} )
 jname="cpr${md5_postfix}"
 
@@ -346,22 +355,22 @@ if [ $? -eq 0 ]; then
 
 	tmpjconf=$( ${MKTEMP_CMD} )
 
-	TRAP="${TRAP} /bin/rm -f ${tmpjconf};"
+	TRAP="${TRAP} ${RM_CMD} -f ${tmpjconf};"
 	trap "${TRAP}" HUP INT QUIT ABRT KILL ALRM TERM BUS EXIT
 
-	/usr/bin/sed -e "s:#jname#:${jname}:g" \
+	${SED_CMD} -e "s:#jname#:${jname}:g" \
 	-e "s:#ver#:${ver}:g" \
 	-e "s:#workdir#:${cbsd_workdir}:g" ${tpl} > ${tmpjconf}
 
 	${ECHO} "${N1_COLOR}Obtain new jail: ${N2_COLOR}${jname}${N0_COLOR}"
 	jcreate jconf=${tmpjconf} || err 1 "Error jail creation via tpl ${tpl}"
 
-	pkg mode=bootstrap jname=${jname} ||true
+	${PKG_CMD} mode=bootstrap jname=${jname} ||true
 
-	cat > ${workdir}/jails-system/${jname}/descr <<EOF
+	${CAT_CMD} > ${workdir}/jails-system/${jname}/descr <<EOF
 Created by cbsd cpr
 
-Created: `/bin/date`
+Created: `${DATE_CMD}`
 Pkg list: ${pkglist}
 
 EOF
@@ -370,7 +379,7 @@ else
 	${ECHO} "${N1_COLOR}Jail already created: ${N2_COLOR}${jname}${N0_COLOR}"
 fi
 
-. ${jrcconf}
+. ${subrdir}/rcconf.subr
 [ "${baserw}" = "1" ] && path=${data}
 
 if [ ${jid} -eq 0 ]; then
@@ -378,14 +387,7 @@ if [ ${jid} -eq 0 ]; then
 	jstart ${jname}
 fi
 
-#[ -d "${path}" ] && umount_paths ${path} || true
-#[ -d "${path}" -a $new -eq 1 ] && chflags -R noschg ${path} && rm -rf ${path}
-#[ ! -d "${path}" -a $new -eq 0 ] && new=1
-#[ ! -d "${path}" ] && /bin/mkdir ${path}
-#[ $new -eq 1 ] && baserw=1 && populate_path ${BASE_DIR} ${path} ||true
-#[ $new -eq 0 ] && touch ${path}/tmp/buildcontinue
-
-[ ! -d "${PORTSCFG_SRC}" ] && /bin/mkdir -p $PORTSCFG_SRC
+[ ! -d "${PORTSCFG_SRC}" ] && ${MKDIR_CMD} -p $PORTSCFG_SRC
 
 if [ -z "${repoversion}" -o "${repoversion}" = "default" ]; then
 	PORTSCFG_SRC="/var/db/ports"
@@ -422,15 +424,15 @@ if [ $tmux_cpr -eq 1 ]; then
 		fi
 
 		# make sure we have work dir in /tmp for parallel builds
-		[ $( /usr/bin/grep ^WRKDIRPREFIX= ${path}/etc/make.conf| /usr/bin/wc -l )  = 0 ] && echo WRKDIRPREFIX=/tmp >> ${path}/etc/make.conf
+		[ $( ${GREP_CMD} ^WRKDIRPREFIX= ${path}/etc/make.conf | ${WC_CMD} -l )  = 0 ] && echo WRKDIRPREFIX=/tmp >> ${path}/etc/make.conf
 
-		[ "${batch}" = "1" ] && /usr/sbin/sysrc -qf ${path}/etc/make.conf BATCH=no
+		[ "${batch}" = "1" ] && ${SYSRC_CMD} -qf ${path}/etc/make.conf BATCH=no
 
-		DT_START=$( /bin/date +%s )
+		DT_START=$( ${DATE_CMD} +%s )
 		send_notification -s "[CBSD ${nodename}] cpr ${ver} ${arch} ${repoversion} started" -b "${DT_START}"
-		/bin/cp ${_MYDIR}/cpr_packages.sh ${path}/tmp/cpr_packages.sh
+		${CP_CMD} ${_MYDIR}/cpr_packages.sh ${path}/tmp/cpr_packages.sh
 
-		/usr/bin/grep -v "^#" ${pkglist} | /usr/bin/grep . > ${path}/tmp/ports_list.txt
+		${GREP_CMD} -v "^#" ${pkglist} | ${GREP_CMD} . > ${path}/tmp/ports_list.txt
 
 		add_args=""
 		[ ${ccache} -eq 1 ] && add_args="${add_args} -c 1"
