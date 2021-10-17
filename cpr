@@ -1,21 +1,48 @@
 #!/usr/local/bin/cbsd
 #v11.0.16
 CBSDMODULE="cpr"
-MYARG="cdir pkglist dstdir"
-MYOPTARG="ver arch basename batch stable new repoversion ccache pause makeconf append usegcc attach tmux_cpr inter"
+MYARG="dstdir pkglist"
+MYOPTARG="append arch attach basename batch ccache inter makeconf new pause repoversion tmux_cpr usegcc ver"
 MYDESC="Create pkg repository"
-ADDHELP="ver=head for current.\n\
-stable=1 for RELENG_X\n\
-dstdir= path to output packages or 'repo' for update repoversion\n\
-pkglist= path to ascii file with port list for install\n\
-new= 1 - new repo (remove path (default)) or 0 - continue\n\
-repoversion= name of repo version (ports cfg version), default for system set\n\
-ccache=1 or 0 - enable ccache (default is 0, disabled)\n\
-distcc=0 or 1 - enable distcc (default is 0, disabled)\n\
-makeconf= path to alternative cpr_make.conf to /etc/make.conf in chroot\n\
-pause=1 - make pause (for example for chroot in env) before create pkg\n\
-append=1 - do not check for dstdir in not empty\n\
-usegcc=path to gcc port\n"
+ADDHELP="
+${H3_COLOR}Description${N0_COLOR}:
+
+The 'cbsd cpr' script allows you to build your own 'pkg' repository by package list, 
+providing functionality similar to poudreire (but much simpler).
+
+The script processes your ports list sequentially and as a result creates repository via 
+'pkg repo'. All work happens in a container named 'cpr<md5_of_template>'.
+
+All selected options you choose interactively and they are saved in the appropriate directory.
+Note: on first launch you will select all options for all ports. If you are mistaken with options, 
+you can go to the jail and re-select the option manually. Or remove all options dir in /var/db/ports-<id>.
+
+${H3_COLOR}General Options${N0_COLOR}:
+
+ ${N2_COLOR}append=${N0_COLOR}      - '1': do not check for dstdir in not empty;
+ ${N2_COLOR}arch=${N0_COLOR}        - <name>, build non-native architectures.
+ ${N2_COLOR}ccache=1${N0_COLOR}     - '1' - enable ccache (default is 0, disabled);
+ ${N2_COLOR}distcc=0${N0_COLOR}     - '1': enable distcc (default is 0, disabled);
+ ${N2_COLOR}dstdir=${N0_COLOR}      - path to output packages or 'repo' for update repoversion;
+ ${N2_COLOR}new=${N0_COLOR}         - '1': new repo (remove path (default)) or 0 - continue;
+ ${N2_COLOR}pkglist=${N0_COLOR}     - path to ascii file with port list for install;
+ ${N2_COLOR}makeconf=${N0_COLOR}    - path to alternative cpr_make.conf to /etc/make.conf in chroot;
+ ${N2_COLOR}pause=${N0_COLOR}       - '1': make pause (for example for chroot in env) before create pkg;
+ ${N2_COLOR}repoversion=${N0_COLOR} - name of repo version (ports cfg version), default for system set;
+ ${N2_COLOR}usegcc=${N0_COLOR}      - path to gcc port;
+ ${N2_COLOR}ver=${N0_COLOR}         - base version, e.g: '13.1', 'head';
+
+${H3_COLOR}Examples${N0_COLOR}:
+
+Full example:
+
+echo \"/usr/ports/www/nginx\" > /tmp/myrepo.list
+echo \"/usr/ports/misc/mc\" >> /tmp/myrepo.list
+echo \"/usr/ports/shells/bash\" >> /tmp/myrepo.list
+
+cbsd cpr pkglist=/tmp/myrepo.list dstdir=/tmp/myrepo
+
+"
 #set -e
 
 TRAP=""
@@ -31,11 +58,8 @@ over=
 . ${cbsdinit}
 
 [ -n "${ver}" ] && over="${ver}"
-
 . ${subrdir}/distccache.subr
 . ${subrdir}/mailtools.subr
-. ${subrdir}/universe.subr
-. ${subrdir}/build.subr
 
 if [ -n "${over}" ]; then
 	ver="${over}"
@@ -43,6 +67,18 @@ elif [ -z "${ver}" ]; then
 	ver=$( ${SYSCTL_CMD} -n kern.osrelease | ${CUT_CMD} -d - -f 1 )
 fi
 
+# detect stable
+strpos --str="${ver}" --search="."
+# auto-detect for stable/release
+pos=$?
+if [ ${pos} -eq 0 ]; then
+	stable=1
+else
+	stable=0
+fi
+
+. ${subrdir}/universe.subr
+. ${subrdir}/build.subr
 [ -z "${pause}" ] && pause=0
 [ -z "${batch}" ] && batch=0
 
@@ -75,7 +111,7 @@ post_action()
 
 	${ECHO} "${N1_COLOR}Creating packages... ${N0_COLOR}"
 
-	chroot ${path} /bin/sh << EOF
+	${CHROOT_CMD} ${path} /bin/sh << EOF
 export PACKAGES=/packages
 
 for i in \$( ${PKG_CMD} query %n-%v ); do
@@ -84,7 +120,7 @@ done
 
 cd \${PACKAGES}/All
 ${RM_CMD} -f digests.txz packagesite.txz repo.txz
-pkg repo .
+${PKG_CMD} repo .
 EOF
 
 	TRAP="${TRAP} ${RM_CMD} -f ${LOCKFILE} ${_tmppkglist};"
@@ -243,7 +279,12 @@ prepare_chroot()
 	# remove default pkg.conf
 	${RM_CMD} -f ${path}/etc/pkg/*.conf
 
-	${CP_CMD} /etc/resolv.conf ${path}/etc
+	# into options
+	#${CP_CMD} /etc/resolv.conf ${path}/etc
+	${CAT_CMD} > ${path}/etc/resolv.conf <<EOF
+nameserver 8.8.8.8
+nameserver 8.8.4.4
+EOF
 
 	${TOUCH_CMD} ${path}/etc/src.conf
 
@@ -322,9 +363,9 @@ else
 fi
 
 if [ -d "${dstdir}" ]; then
-	if [ "${new}" = "1" -o "${append}" = "0" ]; then
+	if [ "${new}" = "1" -a "${append}" != "1" ]; then
 		A=$( ${LS_CMD} -1 ${dstdir}/ | ${WC_CMD} -l | ${AWK_CMD} '{ printf $1 }' )
-		[ "${A}" != "0" ] && ${ECHO} "${N1_COLOR}Warning: ${N2_COLOR}${dstdir}/${N1_COLOR} is not empty. Please clean before cpr initialization:${N0_COLOR}" && err 1 $( ${LS_CMD} -1 ${dstdir} )
+		[ "${A}" != "0" ] && ${ECHO} "${N1_COLOR}Warning: ${N2_COLOR}${dstdir}/${N1_COLOR} is not empty. Please use ${N2_COLOR}append=1${N1_COLOR} or clean before cpr initialization:${N0_COLOR}" && err 1 $( ${LS_CMD} -1 ${dstdir} )
 	fi
 else
 	${MKDIR_CMD} -p "${dstdir}"
@@ -365,7 +406,7 @@ if [ $? -eq 0 ]; then
 	${ECHO} "${N1_COLOR}Obtain new jail: ${N2_COLOR}${jname}${N0_COLOR}"
 	jcreate jconf=${tmpjconf} || err 1 "Error jail creation via tpl ${tpl}"
 
-	${PKG_CMD} mode=bootstrap jname=${jname} ||true
+	${PKG_CMD} mode=bootstrap jname=${jname} || true
 
 	${CAT_CMD} > ${workdir}/jails-system/${jname}/descr <<EOF
 Created by cbsd cpr
@@ -387,19 +428,21 @@ if [ ${jid} -eq 0 ]; then
 	jstart ${jname}
 fi
 
-[ ! -d "${PORTSCFG_SRC}" ] && ${MKDIR_CMD} -p $PORTSCFG_SRC
-
 if [ -z "${repoversion}" -o "${repoversion}" = "default" ]; then
-	PORTSCFG_SRC="/var/db/ports"
+	# move to systemdir?
+	PORTSCFG_SRC="/var/db/ports-${jname}"
 	MYPKGDIR="${PKGDIRROOT}/default"
 else
+	# move to systemdir?
 	PORTSCFG_SRC="${dbdir}/ports-${repoversion}"
 	MYPKGDIR="${PKGDIRROOT}/${repoversion}"
 fi
 
+[ ! -d "${PORTSCFG_SRC}" ] && ${MKDIR_CMD} -p ${PORTSCFG_SRC}
+
 init_tmux "${jname}-cpr"
 
-if [ $tmux_cpr -eq 1 ]; then
+if [ ${tmux_cpr} -eq 1 ]; then
 	${tmuxcmd} list-sessions | ${GREP_CMD} -qwF "${session_name}:"
 	if [ $? -eq 1 ]; then
 
@@ -416,7 +459,7 @@ if [ $tmux_cpr -eq 1 ]; then
 
 		# start action
 		mount_temp_dirs
-		#[ "${MOUNT_PORTS}" = "0" -a $new -eq 1 ] && chroot ${path} portsnap fetch extract
+		#[ "${MOUNT_PORTS}" = "0" -a $new -eq 1 ] && ${CHROOT_CMD} ${path} portsnap fetch extract
 		prepare_chroot
 
 		if [ ${ccache} -eq 1 -o ${distcc} -eq 1 ]; then
@@ -434,13 +477,13 @@ if [ $tmux_cpr -eq 1 ]; then
 
 		${GREP_CMD} -v "^#" ${pkglist} | ${GREP_CMD} . > ${path}/tmp/ports_list.txt
 
-		add_args=""
+		add_args=
 		[ ${ccache} -eq 1 ] && add_args="${add_args} -c 1"
 		[ ${distcc} -eq 1 ] && add_args="${add_args} -d 1"
 
 		jexec="cbsd jexec jname=${jname} sh /tmp/cpr_packages.sh ${add_args}"
-		# start action
 
+		# start action
 		${ECHO} "${N1_COLOR}${tmuxcmd} new -s ${N2_COLOR}${session_name}${N0_COLOR}"
 		${tmuxcmd} new -s "${session_name}" "eval ${jexec}"
 	else
@@ -465,3 +508,5 @@ fi
 #if [ $tmux_cpr -ne 1 ]; then
 	post_action
 #fi
+
+exit 0
