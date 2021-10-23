@@ -109,14 +109,18 @@ post_action()
 		read pause
 	fi
 
-	${ECHO} "${N1_COLOR}Creating packages... ${N0_COLOR}"
+	${ECHO} "${N1_COLOR}Creating packages  ... ${N0_COLOR}"
 
 	${CHROOT_CMD} ${path} /bin/sh << EOF
-export PACKAGES=/packages
+#export PACKAGES=/packages
+export PACKAGES=/tmp/packages
+
+[ ! -d \${PACKAGES}/All ] && mkdir \${PACKAGES}/All
 
 for i in \$( ${PKG_CMD} query %n-%v ); do
 	${PKG_CMD} create -n -g -f txz -o \${PACKAGES}/All/ \$i
 done
+
 
 cd \${PACKAGES}/All
 ${RM_CMD} -f digests.txz packagesite.txz repo.txz
@@ -133,36 +137,43 @@ EOF
 		${FIND_CMD} ${path}/packages/All -type f -name \*.txz -exec ${MV_CMD} -f {} ${MYPKGDIR}/ \;
 		ROOTPKGDIR="${MYPKGDIR}"
 	else
+#		${FIND_CMD} ${path}/packages/All -type f -name \*.txz -exec ${MV_CMD} -f {} ${MYPKGDIR}/ \;
+		ROOTPKGDIR="${dstdir}"
+		[ ! -d ${ROOTPKGDIR} ] && mkdir -p ${ROOTPKGDIR}
+		echo "rsync -avz ${MYPKGDIR}/All/ ${ROOTPKGDIR}/"
+		rsync -avz ${MYPKGDIR}/All/ ${ROOTPKGDIR}/
+
 		${FIND_CMD} ${path}/packages/All -type f -name \*.txz -exec ${CP_CMD} -n {} ${MYPKGDIR}/ \;
-		bver=$( ${miscdir}/elf_tables --freebsdver ${path}/bin/sh )
-		bosname=$( ${miscdir}/elf_tables --osname ${path}/bin/sh )
-		barch=$( ${miscdir}/elf_tables --arch ${path}/bin/sh )
-
-		case "${bosname}" in
-			freebsd)
-				bosname="FreeBSD"
-				;;
-			*)
-				err 1 "${N1_COLOR}Unknown osname: ${N2_COLOR}${bosname}${N0_COLOR}"
-				;;
-		esac
-
-		case "${barch}" in
-			x86)
-				barch="amd64"
-				;;
-			*)
-				err 1 "${N1_COLOR}Unknown arch: ${N2_COLOR}${barch}${N0_COLOR}"
-				;;
-		esac
-
-		ROOTPKGDIR="${dstdir}/${bosname}:${bver}:${barch}"
-
-		[ -d "${ROOTPKGDIR}" ] && ${RM_CMD} -rf ${ROOTPKGDIR}
-		${MKDIR_CMD} -p ${ROOTPKGDIR}
-
-		echo "${MV_CMD} ${MYPKGDIR} ${ROOTPKGDIR}/All"
-		${MV_CMD} ${MYPKGDIR} ${ROOTPKGDIR}/All
+#		bver=$( ${miscdir}/elf_tables --freebsdver ${path}/bin/sh )
+#		bosname=$( ${miscdir}/elf_tables --osname ${path}/bin/sh )
+#		barch=$( ${miscdir}/elf_tables --arch ${path}/bin/sh )
+#
+#		case "${bosname}" in
+#			freebsd)
+#				bosname="FreeBSD"
+#				;;
+#			*)
+#				err 1 "${N1_COLOR}Unknown osname: ${N2_COLOR}${bosname}${N0_COLOR}"
+#				;;
+#		esac
+#
+#		case "${barch}" in
+#			x86)
+#				barch="amd64"
+#				;;
+#			*)
+#				err 1 "${N1_COLOR}Unknown arch: ${N2_COLOR}${barch}${N0_COLOR}"
+#				;;
+#		esac
+#
+#		ROOTPKGDIR="${dstdir}/${bosname}:${bver}:${barch}"
+#
+#		[ -d "${ROOTPKGDIR}" ] && ${RM_CMD} -rf ${ROOTPKGDIR}
+#		${MKDIR_CMD} -p ${ROOTPKGDIR}
+#
+##MYPKGDIR
+#		echo "* ${MV_CMD} ${MYPKGDIR} ${ROOTPKGDIR}/All"
+#
 		#echo "ER"
 		#mkdir -p ${ROOTPKGDIR}
 		#echo "mv ${path}/packages/x ${ROOTPKGDIR}/"
@@ -171,19 +182,21 @@ EOF
 	fi
 
 	# create pkg in symlinked /latest location (see pkg-repository(5))
+
+	echo "WORK : ${ROOTPKGDIR}"
 	cd ${ROOTPKGDIR}
-	${LN_CMD} -sf ./All ./latest
-	cd ${ROOTPKGDIR}/All
-	${FIND_CMD} ./ -type f -name pkg-[0-9]* -exec ${LN_CMD} -sf {} ./pkg.txz \;
+#	${LN_CMD} -sf ./All ./latest
+#	cd ${ROOTPKGDIR}/All
+	${FIND_CMD} ./ -type f -name pkg-[0-9]*.pkg -exec ${LN_CMD} -sf {} ./pkg.pkg \;
 
 	# for some reason pkg <bootstrap/install> trying to get
 	# pkg from: <url>/FreeBSD:12:amd64/latest/Latest/pkg.txz
 
-	if [ -h ${ROOTPKGDIR}/All/pkg.txz ]; then
-		${MKDIR_CMD} -p ${ROOTPKGDIR}/All/Latest
-		orig_pkg=$( ${REALPATH_CMD} ${ROOTPKGDIR}/All/pkg.txz )
-		${CP_CMD} ${orig_pkg} ${ROOTPKGDIR}/All/Latest/pkg.txz
-	fi
+#	if [ -h ${ROOTPKGDIR}/All/pkg.txz ]; then
+#		${MKDIR_CMD} -p ${ROOTPKGDIR}/All/Latest
+#		orig_pkg=$( ${REALPATH_CMD} ${ROOTPKGDIR}/All/pkg.txz )
+#		${CP_CMD} ${orig_pkg} ${ROOTPKGDIR}/All/Latest/pkg.txz
+#	fi
 
 	jstop ${jname}
 
@@ -431,7 +444,7 @@ fi
 if [ -z "${repoversion}" -o "${repoversion}" = "default" ]; then
 	# move to systemdir?
 	PORTSCFG_SRC="/var/db/ports-${jname}"
-	MYPKGDIR="${PKGDIRROOT}/default"
+	MYPKGDIR="${PKGDIRROOT}/pkgdir-${jname}"
 else
 	# move to systemdir?
 	PORTSCFG_SRC="${dbdir}/ports-${repoversion}"
