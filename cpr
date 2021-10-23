@@ -418,8 +418,8 @@ if [ $? -eq 0 ]; then
 
 	${ECHO} "${N1_COLOR}Obtain new jail: ${N2_COLOR}${jname}${N0_COLOR}"
 	jcreate jconf=${tmpjconf} || err 1 "Error jail creation via tpl ${tpl}"
-
-	${PKG_CMD} mode=bootstrap jname=${jname} || true
+	# CBSD pkg
+	pkg mode=bootstrap jname=${jname} || true
 
 	${CAT_CMD} > ${workdir}/jails-system/${jname}/descr <<EOF
 Created by cbsd cpr
