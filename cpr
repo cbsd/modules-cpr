@@ -117,14 +117,14 @@ export PACKAGES=/tmp/packages
 
 [ ! -d \${PACKAGES}/All ] && mkdir \${PACKAGES}/All
 
-for i in \$( ${PKG_CMD} query %n-%v ); do
-	${PKG_CMD} create -n -g -f txz -o \${PACKAGES}/All/ \$i
+for i in \$( pkg query %n-%v ); do
+	pkg create -n -g -f txz -o \${PACKAGES}/All/ \$i
 done
 
 
 cd \${PACKAGES}/All
 ${RM_CMD} -f digests.txz packagesite.txz repo.txz
-${PKG_CMD} repo .
+pkg repo .
 EOF
 
 	TRAP="${TRAP} ${RM_CMD} -f ${LOCKFILE} ${_tmppkglist};"
