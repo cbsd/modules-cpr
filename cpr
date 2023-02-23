@@ -2,7 +2,7 @@
 #v11.0.16
 CBSDMODULE="cpr"
 MYARG="dstdir pkglist"
-MYOPTARG="append arch attach basename batch ccache inter makeconf new pause repoversion tmux_cpr usegcc ver"
+MYOPTARG="append arch attach basename batch ccache inter makeconf new package_fetch pause repoversion tmux_cpr usegcc ver"
 MYDESC="Create pkg repository"
 ADDHELP="
 ${H3_COLOR}Description${N0_COLOR}:
@@ -19,18 +19,19 @@ you can go to the jail and re-select the option manually. Or remove all options 
 
 ${H3_COLOR}General Options${N0_COLOR}:
 
- ${N2_COLOR}append=${N0_COLOR}      - '1': do not check for dstdir in not empty;
- ${N2_COLOR}arch=${N0_COLOR}        - <name>, build non-native architectures.
- ${N2_COLOR}ccache=1${N0_COLOR}     - '1' - enable ccache (default is 0, disabled);
- ${N2_COLOR}distcc=0${N0_COLOR}     - '1': enable distcc (default is 0, disabled);
- ${N2_COLOR}dstdir=${N0_COLOR}      - path to output packages or 'repo' for update repoversion;
- ${N2_COLOR}new=${N0_COLOR}         - '1': new repo (remove path (default)) or 0 - continue;
- ${N2_COLOR}pkglist=${N0_COLOR}     - path to ascii file with port list for install;
- ${N2_COLOR}makeconf=${N0_COLOR}    - path to alternative cpr_make.conf to /etc/make.conf in chroot;
- ${N2_COLOR}pause=${N0_COLOR}       - '1': make pause (for example for chroot in env) before create pkg;
- ${N2_COLOR}repoversion=${N0_COLOR} - name of repo version (ports cfg version), default for system set;
- ${N2_COLOR}usegcc=${N0_COLOR}      - path to gcc port;
- ${N2_COLOR}ver=${N0_COLOR}         - base version, e.g: '13.1', 'head';
+ ${N2_COLOR}append=${N0_COLOR}        - '1': do not check for dstdir in not empty;
+ ${N2_COLOR}arch=${N0_COLOR}          - <name>, build non-native architectures.
+ ${N2_COLOR}ccache=1${N0_COLOR}       - '1' - enable ccache (default is 0, disabled);
+ ${N2_COLOR}distcc=0${N0_COLOR}       - '1': enable distcc (default is 0, disabled);
+ ${N2_COLOR}dstdir=${N0_COLOR}        - path to output packages or 'repo' for update repoversion;
+ ${N2_COLOR}new=${N0_COLOR}           - '1': new repo (remove path (default)) or 0 - continue;
+ ${N2_COLOR}pkglist=${N0_COLOR}       - path to ascii file with port list for install;
+ ${N2_COLOR}makeconf=${N0_COLOR}      - path to alternative cpr_make.conf to /etc/make.conf in chroot;
+ ${N2_COLOR}package_fetch=${N0_COLOR} - install some packages via pkg, e.g.: package_fetch="llvm16";
+ ${N2_COLOR}pause=${N0_COLOR}         - '1': make pause (for example for chroot in env) before create pkg;
+ ${N2_COLOR}repoversion=${N0_COLOR}   - name of repo version (ports cfg version), default for system set;
+ ${N2_COLOR}usegcc=${N0_COLOR}        - path to gcc port;
+ ${N2_COLOR}ver=${N0_COLOR}           - base version, e.g: '13.1', 'head';
 
 ${H3_COLOR}Examples${N0_COLOR}:
 
@@ -55,9 +56,12 @@ readconf buildworld.conf
 
 ver=
 over=
+package_fetch=
+opackage_fetch=
 . ${cbsdinit}
 
 [ -n "${ver}" ] && over="${ver}"
+[ -z "{package_fetch}" ] && opackage_fetch="${package_fetch}"
 . ${subrdir}/distccache.subr
 . ${subrdir}/mailtools.subr
 
@@ -304,7 +308,14 @@ EOF
 	${CHROOT_CMD} $path /bin/sh << EOF
 ${SERVICE_CMD} ldconfig start
 ${MV_CMD} /etc/make.conf /tmp
-${PKG_CMD} info -e pkg || env WITH_PKG=devel env BATCH=no env WRKDIRPREFIX=/tmp ${MAKE_CMD} -C /usr/ports/ports-mgmt/pkg-devel clean install
+${PKG_CMD} info -e pkg
+ret=$?
+if [ ${ret} -ne 0 ]; then
+	echo "/usr/ports/ports-mgmt/pkg not installed
+else
+	env BATCH=no env WRKDIRPREFIX=/tmp ${MAKE_CMD} -C /usr/ports/ports-mgmt/pkg clean
+	env BATCH=no env WRKDIRPREFIX=/tmp ${MAKE_CMD} -C /usr/ports/ports-mgmt/pkg install
+fi
 ${MV_CMD} /tmp/make.conf /etc
 # remove default pkg.conf
 [ -f "/usr/local/etc/pkg.conf" ] && ${RM_CMD} -f /usr/local/etc/pkg.conf
@@ -419,6 +430,18 @@ if [ $? -eq 0 ]; then
 	${ECHO} "${N1_COLOR}Obtain new jail: ${N2_COLOR}${jname}${N0_COLOR}"
 	jcreate jconf=${tmpjconf} || err 1 "Error jail creation via tpl ${tpl}"
 	# CBSD pkg
+	# always use latest
+	${CAT_CMD} > ${cbsd_workdir}/jails-data/${jname}-data/etc/pkg/FreeBSD.conf <<EOF
+FreeBSD: {
+  url: "pkg+http://pkg.FreeBSD.org/\${ABI}/latest",
+  mirror_type: "srv",
+  signature_type: "fingerprints",
+  fingerprints: "/usr/share/keys/pkg",
+  enabled: yes
+}
+EOF
+
+	pkg mode=update jname=${jname} || true
 	pkg mode=bootstrap jname=${jname} || true
 
 	${CAT_CMD} > ${workdir}/jails-system/${jname}/descr <<EOF
@@ -453,6 +476,18 @@ fi
 
 [ ! -d "${PORTSCFG_SRC}" ] && ${MKDIR_CMD} -p ${PORTSCFG_SRC}
 
+
+[ -n "${opackage_fetch}" ] && package_fetch="${opackage_fetch}"
+if [ -n "${package_fetch}" ]; then
+	${ECHO} "${N1_COLOR}Prefetch packages: ${N2_COLOR}${package_fetch}${N0_COLOR}"
+	pkg mode=install jname="${jname}" ${package_fetch} >> /tmp/pkg.txt
+	ret=$?
+	echo "RET: ${ret}"
+	if [ ${ret} -ne 0 ]; then
+		err 1 "${W1_COLOR}Error: ${N2_COLOR}pkg mode=install jname=\"${jname}\" ${package_fetch}${N0_COLOR}"
+	fi
+fi
+
 init_tmux "${jname}-cpr"
 
 if [ ${tmux_cpr} -eq 1 ]; then
@@ -479,6 +514,7 @@ if [ ${tmux_cpr} -eq 1 ]; then
 			prepare_make_conf ${makeconf} ${path}/etc/make.conf
 		fi
 
+
 		# make sure we have work dir in /tmp for parallel builds
 		[ $( ${GREP_CMD} ^WRKDIRPREFIX= ${path}/etc/make.conf | ${WC_CMD} -l )  = 0 ] && echo WRKDIRPREFIX=/tmp >> ${path}/etc/make.conf
 
@@ -493,6 +529,7 @@ if [ ${tmux_cpr} -eq 1 ]; then
 		add_args=
 		[ ${ccache} -eq 1 ] && add_args="${add_args} -c 1"
 		[ ${distcc} -eq 1 ] && add_args="${add_args} -d 1"
+
 
 		jexec="cbsd jexec jname=${jname} sh /tmp/cpr_packages.sh ${add_args}"
 

@@ -93,7 +93,7 @@ for dir in $PORT_DIRS; do
 #	while [ $NOCONF -eq 0 ]; do
 		echo -e "\033[40;35m Do config-recursive while not set for all options: ${PROGRESS}/${ALLPORTS} \033[0m"
 		# script -q /tmp/test.$$ 
-		make config-recursive -C ${dir}
+#		make config-recursive -C ${dir}
 		PASS=$(( PASS + 1 ))
 		[ ${PASS} -gt ${ALLPORTS} ] && NOCONF=1
 		# || break
@@ -138,7 +138,8 @@ for dir in $PORT_DIRS; do
 		continue
 	fi
 
-	PORTNAME=$( make -C ${dir} -V PKGNAME )
+	#PORTNAME=$( make -C ${dir} -V PKGNAME )
+	PORTNAME=$( make -C ${dir} -V PORTNAME )
 
 	if [ -f /tmp/buildcontinue ]; then
 		cd /tmp/packages
@@ -148,11 +149,22 @@ for dir in $PORT_DIRS; do
 		}
 	fi
 
-	pkg info -e ${PORTNAME} && continue
+	echo "CHECK for $PORTNAME installed"
+	pkg info -e ${PORTNAME}
+	ret=$?
+
+	if [ ${ret} -eq 0 ]; then
+		echo "Already installed"
+		continue
+	fi
+
+	echo "Not installed: ${PORTNAME} ( pkg info -e ${PORTNAME} )"
+	#read p
 
 	/bin/rm -f ${BUILDLOG}
 	make -C ${dir} install |tee ${BUILDLOG}
 	ret=$?
+
 
 	# additional check for package installed
 	pkg info -e ${PORTNAME} >/dev/null 2>&1
