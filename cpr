@@ -2,7 +2,7 @@
 #v11.0.16
 CBSDMODULE="cpr"
 MYARG="dstdir pkglist"
-MYOPTARG="append arch attach basename batch ccache inter makeconf new package_fetch pause repoversion tmux_cpr usegcc ver"
+MYOPTARG="append arch attach autoremove basename batch ccache inter makeconf new package_fetch pause repoversion tmux_cpr usegcc ver"
 MYDESC="Create pkg repository"
 ADDHELP="
 ${H3_COLOR}Description${N0_COLOR}:
@@ -21,6 +21,7 @@ ${H3_COLOR}General Options${N0_COLOR}:
 
  ${N2_COLOR}append=${N0_COLOR}        - '1': do not check for dstdir in not empty;
  ${N2_COLOR}arch=${N0_COLOR}          - <name>, build non-native architectures.
+ ${N2_COLOR}autoremove=${N0_COLOR}    - '1' - run 'pkg autoremove' at the end of session. Default - '0'
  ${N2_COLOR}ccache=1${N0_COLOR}       - '1' - enable ccache (default is 0, disabled);
  ${N2_COLOR}distcc=0${N0_COLOR}       - '1': enable distcc (default is 0, disabled);
  ${N2_COLOR}dstdir=${N0_COLOR}        - path to output packages or 'repo' for update repoversion;
@@ -58,10 +59,14 @@ ver=
 over=
 package_fetch=
 opackage_fetch=
+oautoremove=
 . ${cbsdinit}
 
 [ -n "${ver}" ] && over="${ver}"
 [ -z "{package_fetch}" ] && opackage_fetch="${package_fetch}"
+[ -n "${autoremove}" ] && oautoremove="${autoremove}"
+[ -z "${autoremove}" ] && autoremove=0
+
 . ${subrdir}/distccache.subr
 . ${subrdir}/mailtools.subr
 
@@ -113,9 +118,18 @@ post_action()
 		read pause
 	fi
 
-	${ECHO} "${N1_COLOR}Creating packages  ... ${N0_COLOR}"
+	[ -n "${oautoremove}" ] && autoremove="${oautoremove}"
 
+	if [ "${autoremove}" = "1" ]; then
+		${ECHO} "${N1_COLOR}Run pkg autoremove: autoremove=1 ... ${N0_COLOR}"
+		${CHROOT_CMD} ${path} /bin/sh <<EOF
+pkg autoremove -y
+EOF
+	fi
+
+	${ECHO} "${N1_COLOR}Creating packages  ... ${N0_COLOR}"
 	${CHROOT_CMD} ${path} /bin/sh << EOF
+
 #export PACKAGES=/packages
 export PACKAGES=/tmp/packages
 
