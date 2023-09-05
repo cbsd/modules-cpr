@@ -445,7 +445,9 @@ if [ $? -eq 0 ]; then
 	jcreate jconf=${tmpjconf} || err 1 "Error jail creation via tpl ${tpl}"
 	# CBSD pkg
 	# always use latest
-	${CAT_CMD} > ${cbsd_workdir}/jails-data/${jname}-data/etc/pkg/FreeBSD.conf <<EOF
+	[ ! -d ${cbsd_workdir}/jails-data/${jname}-data/usr/local/etc/etc/pkg/repos ] && ${MKDIR_CMD} -p ${cbsd_workdir}/jails-data/${jname}-data/usr/local/etc/etc/pkg/repos
+
+	${CAT_CMD} >${cbsd_workdir}/jails-data/${jname}-data/usr/local/etc/etc/pkg/repos/FreeBSD.conf <<EOF
 FreeBSD: {
   url: "pkg+http://pkg.FreeBSD.org/\${ABI}/latest",
   mirror_type: "srv",
