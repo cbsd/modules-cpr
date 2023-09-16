@@ -1,0 +1,33 @@
+jail_%%JNAME%%()
+{
+	ver=native
+	ip4_addr="DHCP"
+	host_hostname="${jname}.my.domain"
+	pkg_bootstrap=0
+	sysrc="syslogd_enable=NO \
+		cron_enable=NO \
+		sendmail_enable=NO \
+		sendmail_submit_enable=NO \
+		sendmail_outbound_enable=NO \
+		sendmail_msp_queue_enable=NO \
+		syslogd_enable=NO"
+
+	allow_fusefs="1"
+	allow_linsysfs="1"
+	allow_linprocfs="1"
+	baserw="1"
+	mount_src="1"
+	mount_kernel="1"
+	mount_ports="1"
+	astart="0"
+	floatresolv="1"
+
+	# distcc support
+	#pkglist="distcc"
+}
+
+# postcreate action
+postcreate_%%JNAME%%()
+{
+	# nop
+}

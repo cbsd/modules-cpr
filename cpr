@@ -136,12 +136,13 @@ export PACKAGES=/tmp/packages
 [ ! -d \${PACKAGES}/All ] && mkdir \${PACKAGES}/All
 
 for i in \$( pkg query %n-%v ); do
-	pkg create -n -g -f txz -o \${PACKAGES}/All/ \$i
+	#pkg create -n -g -f txz -o \${PACKAGES}/All/ \$i
+	pkg create -n -g -o \${PACKAGES}/All/ \$i
 done
 
 
 cd \${PACKAGES}/All
-${RM_CMD} -f digests.txz packagesite.txz repo.txz
+${RM_CMD} -f digests.pkg packagesite.pkg repo.pkg
 pkg repo .
 EOF
 
@@ -152,16 +153,16 @@ EOF
 	DT_DIFF=$(( DT_END - DT_START ))
 
 	if [ "${dstdir}" = "repo" ]; then
-		${FIND_CMD} ${path}/packages/All -type f -name \*.txz -exec ${MV_CMD} -f {} ${MYPKGDIR}/ \;
+		${FIND_CMD} ${path}/packages/All -type f -name \*.pkg -exec ${MV_CMD} -f {} ${MYPKGDIR}/ \;
 		ROOTPKGDIR="${MYPKGDIR}"
 	else
-#		${FIND_CMD} ${path}/packages/All -type f -name \*.txz -exec ${MV_CMD} -f {} ${MYPKGDIR}/ \;
+#		${FIND_CMD} ${path}/packages/All -type f -name \*.pkg -exec ${MV_CMD} -f {} ${MYPKGDIR}/ \;
 		ROOTPKGDIR="${dstdir}"
 		[ ! -d ${ROOTPKGDIR} ] && mkdir -p ${ROOTPKGDIR}
 		echo "rsync -avz ${MYPKGDIR}/All/ ${ROOTPKGDIR}/"
 		rsync -avz ${MYPKGDIR}/All/ ${ROOTPKGDIR}/
 
-		${FIND_CMD} ${path}/packages/All -type f -name \*.txz -exec ${CP_CMD} -n {} ${MYPKGDIR}/ \;
+		${FIND_CMD} ${path}/packages/All -type f -name \*.pkg -exec ${CP_CMD} -n {} ${MYPKGDIR}/ \;
 #		bver=$( ${miscdir}/elf_tables --freebsdver ${path}/bin/sh )
 #		bosname=$( ${miscdir}/elf_tables --osname ${path}/bin/sh )
 #		barch=$( ${miscdir}/elf_tables --arch ${path}/bin/sh )
@@ -205,15 +206,17 @@ EOF
 	cd ${ROOTPKGDIR}
 #	${LN_CMD} -sf ./All ./latest
 #	cd ${ROOTPKGDIR}/All
-	${FIND_CMD} ./ -type f -name pkg-[0-9]*.pkg -exec ${LN_CMD} -sf {} ./pkg.pkg \;
+	${FIND_CMD} ./ -type f -name "pkg-[0-9]*.pkg" | while read _f; do
+		${LN_CMD} -sf ${_f} ./pkg.pkg
+	done
 
 	# for some reason pkg <bootstrap/install> trying to get
-	# pkg from: <url>/FreeBSD:12:amd64/latest/Latest/pkg.txz
+	# pkg from: <url>/FreeBSD:12:amd64/latest/Latest/pkg.pkg
 
-#	if [ -h ${ROOTPKGDIR}/All/pkg.txz ]; then
+#	if [ -h ${ROOTPKGDIR}/All/pkg.pkg ]; then
 #		${MKDIR_CMD} -p ${ROOTPKGDIR}/All/Latest
-#		orig_pkg=$( ${REALPATH_CMD} ${ROOTPKGDIR}/All/pkg.txz )
-#		${CP_CMD} ${orig_pkg} ${ROOTPKGDIR}/All/Latest/pkg.txz
+#		orig_pkg=$( ${REALPATH_CMD} ${ROOTPKGDIR}/All/pkg.pkg )
+#		${CP_CMD} ${orig_pkg} ${ROOTPKGDIR}/All/Latest/pkg.pkg
 #	fi
 
 	jstop ${jname}
@@ -307,9 +310,6 @@ prepare_chroot()
 	[ ! -r ${path}/etc/make.conf ] && ${TOUCH_CMD} ${path}/etc/make.conf
 	[ "${batch}" = "1" ] && ${SYSRC_CMD} -qf ${path}/etc/make.conf BATCH=no
 
-	# remove default pkg.conf
-	${RM_CMD} -f ${path}/etc/pkg/*.conf
-
 	# into options
 	#${CP_CMD} /etc/resolv.conf ${path}/etc
 	${CAT_CMD} > ${path}/etc/resolv.conf <<EOF
@@ -331,8 +331,6 @@ else
 	env BATCH=no env WRKDIRPREFIX=/tmp ${MAKE_CMD} -C /usr/ports/ports-mgmt/pkg install
 fi
 ${MV_CMD} /tmp/make.conf /etc
-# remove default pkg.conf
-[ -f "/usr/local/etc/pkg.conf" ] && ${RM_CMD} -f /usr/local/etc/pkg.conf
 [ -d /tmp/usr/ports ] && ${FIND_CMD} /tmp/usr/ports -type d -name work -exec ${RM_CMD} -rf {} \; > /dev/null 2>&1
 
 if [ -n "\${usegcc}" ]; then
@@ -349,7 +347,7 @@ for i in \${NEEDEDPORTS}; do
 		if [ -f /tmp/buildcontinue ]; then
 			cd /tmp/packages
 			pkg info -e \$PORTNAME >/dev/null 2>&1 || {
-				[ -f \${PORTNAME}.txz ] && env ASSUME_ALWAYS_YES=yes pkg add -y ./\${PORTNAME}.txz && echo -e "\033[40;35m\${PORTNAME} found and added from cache. \033[0m"
+				[ -f \${PORTNAME}.pkg ] && env ASSUME_ALWAYS_YES=yes pkg add -y ./\${PORTNAME}.pkg && echo -e "\033[40;35m\${PORTNAME} found and added from cache. \033[0m"
 			}
 			pkg info -e \$PORTNAME || {
 				make -C \$i clean
@@ -426,36 +424,20 @@ jstatus jname=${jname} >/dev/null 2>&1
 
 if [ $? -eq 0 ]; then
 	${ECHO} "${N1_COLOR}No such jail. Create from template: ${N2_COLOR}${jname}${N0_COLOR}"
-	tpl="${_MYDIR}/cpr.jconf"
-	[ ! -f "${tpl}" ] && err 1 "No such profile: ${tpl}"
 
 	[ -z "${cbsd_workdir}" ] && . /etc/rc.conf
 	[ -z "${cbsd_workdir}" ] && err 1 "${N1_COLOR}Empty cbsd_workdir variable${N0_COLOR}"
 
-	tmpjconf=$( ${MKTEMP_CMD} )
+	${CP_CMD} -a ${_MYDIR}/cbsdfile /tmp/cbsdfile.$$
 
-	TRAP="${TRAP} ${RM_CMD} -f ${tmpjconf};"
+	TRAP="${TRAP} ${RM_CMD} -rf /tmp/cbsdfile.$$;"
 	trap "${TRAP}" HUP INT QUIT ABRT KILL ALRM TERM BUS EXIT
 
-	${SED_CMD} -e "s:#jname#:${jname}:g" \
-	-e "s:#ver#:${ver}:g" \
-	-e "s:#workdir#:${cbsd_workdir}:g" ${tpl} > ${tmpjconf}
+	${SED_CMD} -i '' -e "s:%%JNAME%%:${jname}:g" /tmp/cbsdfile.$$/CBSDfile
 
 	${ECHO} "${N1_COLOR}Obtain new jail: ${N2_COLOR}${jname}${N0_COLOR}"
-	jcreate jconf=${tmpjconf} || err 1 "Error jail creation via tpl ${tpl}"
-	# CBSD pkg
-	# always use latest
-	[ ! -d ${cbsd_workdir}/jails-data/${jname}-data/usr/local/etc/etc/pkg/repos ] && ${MKDIR_CMD} -p ${cbsd_workdir}/jails-data/${jname}-data/usr/local/etc/etc/pkg/repos
 
-	${CAT_CMD} >${cbsd_workdir}/jails-data/${jname}-data/usr/local/etc/etc/pkg/repos/FreeBSD.conf <<EOF
-FreeBSD: {
-  url: "pkg+http://pkg.FreeBSD.org/\${ABI}/latest",
-  mirror_type: "srv",
-  signature_type: "fingerprints",
-  fingerprints: "/usr/share/keys/pkg",
-  enabled: yes
-}
-EOF
+	up cbsdfile=/tmp/cbsdfile.$$/CBSDfile || err 1 "Error jail creation via tpl ${tpl}"
 
 	pkg mode=update jname=${jname} || true
 	pkg mode=bootstrap jname=${jname} || true
