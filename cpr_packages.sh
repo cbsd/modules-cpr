@@ -93,7 +93,7 @@ for dir in $PORT_DIRS; do
 #	while [ $NOCONF -eq 0 ]; do
 		echo -e "\033[40;35m Do config-recursive while not set for all options: ${PROGRESS}/${ALLPORTS} \033[0m"
 		# script -q /tmp/test.$$ 
-#		make config-recursive -C ${dir}
+		make config-recursive -C ${dir}
 		PASS=$(( PASS + 1 ))
 		[ ${PASS} -gt ${ALLPORTS} ] && NOCONF=1
 		# || break
