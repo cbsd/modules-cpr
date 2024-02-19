@@ -420,8 +420,9 @@ fi
 [ -z "${makeconf}" ] && makeconf="${_MYDIR}/cpr_make.conf"
 [ ! -f "${pkglist}" ] && err 1 "No pkglist file"
 
-tpl_md5=$( ${miscdir}/cbsd_md5 -qs ${pkglist} )
-md5_postfix=$( substr --pos=0 --len=5 --str=${tpl_md5} )
+tpl_md5=$( ${miscdir}/cbsd_md5 -qs "${pkglist}" )
+
+md5_postfix=$( substr --pos=0 --len=5 --str="${tpl_md5}" )
 jname="cpr${md5_postfix}"
 
 _tmppkglist=""
@@ -438,7 +439,6 @@ if [ $? -eq 0 ]; then
 
 	TRAP="${TRAP} ${RM_CMD} -rf /tmp/cbsdfile.$$;"
 	trap "${TRAP}" HUP INT QUIT ABRT KILL ALRM TERM BUS EXIT
-
 	${SED_CMD} -i${SED_DELIMER}'' -e "s:%%JNAME%%:${jname}:g" /tmp/cbsdfile.$$/CBSDfile
 
 	${ECHO} "${N1_COLOR}Obtain new jail: ${N2_COLOR}${jname}${N0_COLOR}"
