@@ -420,7 +420,7 @@ fi
 [ -z "${makeconf}" ] && makeconf="${_MYDIR}/cpr_make.conf"
 [ ! -f "${pkglist}" ] && err 1 "No pkglist file"
 
-tpl_md5=$( ${MD5_CMD} -qs ${pkglist} )
+tpl_md5=$( ${miscdir}/cbsd_md5 -qs ${pkglist} )
 md5_postfix=$( substr --pos=0 --len=5 --str=${tpl_md5} )
 jname="cpr${md5_postfix}"
 
