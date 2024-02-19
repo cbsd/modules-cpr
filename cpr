@@ -2,7 +2,7 @@
 #v11.0.16
 CBSDMODULE="cpr"
 MYARG="dstdir pkglist"
-MYOPTARG="append arch attach autoremove basename batch ccache inter makeconf new package_fetch pause repoversion tmux_cpr usegcc ver"
+MYOPTARG="append arch attach autoremove basename batch ccache inter jname makeconf new package_fetch pause repoversion tmux_cpr usegcc ver"
 MYDESC="Create pkg repository"
 ADDHELP="
 ${H3_COLOR}Description${N0_COLOR}:
@@ -28,11 +28,12 @@ ${H3_COLOR}General Options${N0_COLOR}:
  ${N2_COLOR}new=${N0_COLOR}           - '1': new repo (remove path (default)) or 0 - continue;
  ${N2_COLOR}pkglist=${N0_COLOR}       - path to ascii file with port list for install;
  ${N2_COLOR}makeconf=${N0_COLOR}      - path to alternative cpr_make.conf to /etc/make.conf in chroot;
+ ${N2_COLOR}jname=${N0_COLOR}         - use 'jname' for cpr jail;
  ${N2_COLOR}package_fetch=${N0_COLOR} - install some packages via pkg, e.g.: package_fetch="llvm16";
  ${N2_COLOR}pause=${N0_COLOR}         - '1': make pause (for example for chroot in env) before create pkg;
  ${N2_COLOR}repoversion=${N0_COLOR}   - name of repo version (ports cfg version), default for system set;
  ${N2_COLOR}usegcc=${N0_COLOR}        - path to gcc port;
- ${N2_COLOR}ver=${N0_COLOR}           - base version, e.g: '13.1', 'head';
+ ${N2_COLOR}ver=${N0_COLOR}           - base version, e.g: '14.1', 'head';
 
 ${H3_COLOR}Examples${N0_COLOR}:
 
@@ -62,8 +63,10 @@ opackage_fetch=
 oautoremove=
 omakeconf=
 makeconf=
+jname=
 . ${cbsdinit}
 
+[ -n "${jname}" ] && ojname="${jname}"
 [ -n "${makeconf}" ] && omakeconf="${makeconf}"
 [ -n "${ver}" ] && over="${ver}"
 [ -z "{package_fetch}" ] && opackage_fetch="${package_fetch}"
@@ -420,10 +423,13 @@ fi
 [ -z "${makeconf}" ] && makeconf="${_MYDIR}/cpr_make.conf"
 [ ! -f "${pkglist}" ] && err 1 "No pkglist file"
 
-tpl_md5=$( ${miscdir}/cbsd_md5 -qs "${pkglist}" )
-
-md5_postfix=$( substr --pos=0 --len=5 --str="${tpl_md5}" )
-jname="cpr${md5_postfix}"
+if [ -n "${ojname}" ]; then
+	jname="${jname}"
+else
+	tpl_md5=$( ${miscdir}/cbsd_md5 -qs "${pkglist}" )
+	md5_postfix=$( substr --pos=0 --len=5 --str="${tpl_md5}" )
+	jname="cpr${md5_postfix}"
+fi
 
 _tmppkglist=""
 
