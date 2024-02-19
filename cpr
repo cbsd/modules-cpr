@@ -439,7 +439,7 @@ if [ $? -eq 0 ]; then
 	TRAP="${TRAP} ${RM_CMD} -rf /tmp/cbsdfile.$$;"
 	trap "${TRAP}" HUP INT QUIT ABRT KILL ALRM TERM BUS EXIT
 
-	${SED_CMD} -i '' -e "s:%%JNAME%%:${jname}:g" /tmp/cbsdfile.$$/CBSDfile
+	${SED_CMD} -i${SED_DELIMER}'' -e "s:%%JNAME%%:${jname}:g" /tmp/cbsdfile.$$/CBSDfile
 
 	${ECHO} "${N1_COLOR}Obtain new jail: ${N2_COLOR}${jname}${N0_COLOR}"
 
