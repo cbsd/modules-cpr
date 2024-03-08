@@ -213,6 +213,7 @@ EOF
 #	cd ${ROOTPKGDIR}/All
 	[ ! -d Latest ] && ${MKDIR_CMD} Latest
 	${FIND_CMD} ./ -type f -name "pkg-[0-9]*.pkg" | while read _f; do
+		_f=$( ${BASENAME_CMD} ${_f} )
 		${LN_CMD} -sf ${_f} ./pkg.pkg
 		# back-compat
 		${LN_CMD} -sf ${_f} ./pkg.txz
