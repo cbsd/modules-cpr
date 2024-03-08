@@ -1,6 +1,5 @@
 #!/bin/sh
 #export LN='/bin/ln -f'
-export PKG_SUFX=txz
 export PACKAGES=/packages
 export DISABLE_VULNERABILITIES=yes
 
@@ -121,19 +120,14 @@ for dir in $PORT_DIRS; do
 	echo -e "\033[40;35m Working on ${dir}. ${PROGRESS}/${ALLPORTS} ports left. \033[0m"
 	# skip if ports already registered
 
-	sysrc -qf ${status_file} current_build="${dir}"
-	sysrc -qf ${status_file} pkg_left="${PROGRESS}"
+	sysrc -qf ${status_file} current_build="${dir}" pkg_left="${PROGRESS}"
 
-	sysrc -qf ${descr_status_file} current_build="${dir}"
-	sysrc -qf ${descr_status_file} pkg_left="${PROGRESS}"
+	sysrc -qf ${descr_status_file} current_build="${dir}" pkg_left="${PROGRESS}"
 
 	if [ ! -d "${dir}" ]; then
 		FAILED=$(( FAILED + 1 ))
 		FAILED_LIST="${FAILED_LIST} ${dir}"
-		sysrc -qf ${status_file} FAILED="${FAILED}"
-		sysrc -qf ${status_file} FAILED_LIST="${FAILED_LIST}"
-		sysrc -qf ${descr_status_file} FAILED="${FAILED}"
-		sysrc -qf ${descr_status_file} FAILED_LIST="${FAILED_LIST}"
+		sysrc -qf ${status_file} FAILED="${FAILED}" FAILED_LIST="${FAILED_LIST}" FAILED="${FAILED}" FAILED_LIST="${FAILED_LIST}"
 		echo -e "\033[40;35m Warning: skip port, no such directory: \033[0;32m${dir} \033[0m"
 		continue
 	fi
@@ -145,7 +139,7 @@ for dir in $PORT_DIRS; do
 		cd /tmp/packages
 		pkg info -e ${PORTNAME} >/dev/null 2>&1 || {
 			# errcode =1 when no package
-			[ -f "./${PORTNAME}.txz" ] && env ASSUME_ALWAYS_YES=yes pkg add ./${PORTNAME}.txz && echo -e "\033[40;35m ${PORTNAME} found and added from cache. \033[0m"
+			[ -f "./${PORTNAME}.pkg" ] && env ASSUME_ALWAYS_YES=yes pkg add ./${PORTNAME}.pkg && echo -e "\033[40;35m ${PORTNAME} found and added from cache. \033[0m"
 		}
 	fi
 

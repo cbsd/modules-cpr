@@ -142,7 +142,6 @@ export PACKAGES=/tmp/packages
 [ ! -d \${PACKAGES}/All ] && mkdir \${PACKAGES}/All
 
 for i in \$( pkg query %n-%v ); do
-	#pkg create -n -g -f txz -o \${PACKAGES}/All/ \$i
 	pkg create -n -g -o \${PACKAGES}/All/ \$i
 done
 
@@ -212,8 +211,15 @@ EOF
 	cd ${ROOTPKGDIR}
 #	${LN_CMD} -sf ./All ./latest
 #	cd ${ROOTPKGDIR}/All
+	[ ! -d Latest ] && ${MKDIR_CMD} Latest
 	${FIND_CMD} ./ -type f -name "pkg-[0-9]*.pkg" | while read _f; do
 		${LN_CMD} -sf ${_f} ./pkg.pkg
+		# back-compat
+		${LN_CMD} -sf ${_f} ./pkg.txz
+		cd ./Latest
+		${LN_CMD} -sf ../${_f} ./pkg.pkg
+		${LN_CMD} -sf ../${_f} ./pkg.txz
+		cd ..
 	done
 
 	# for some reason pkg <bootstrap/install> trying to get
