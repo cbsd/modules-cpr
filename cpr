@@ -324,7 +324,7 @@ prepare_chroot()
 		${CP_CMD} ${makeconf} ${path}/etc/make.conf
 	fi
 	[ ! -r ${path}/etc/make.conf ] && ${TOUCH_CMD} ${path}/etc/make.conf
-	[ "${batch}" = "1" ] && ${SYSRC_CMD} -qf ${path}/etc/make.conf BATCH=no
+	[ "${batch}" = "1" ] && /usr/local/cbsd/misc/cbsdsysrc -qf ${path}/etc/make.conf BATCH=no
 
 	# into options
 	#${CP_CMD} /etc/resolv.conf ${path}/etc
@@ -356,7 +356,7 @@ if [ -n "\${usegcc}" ]; then
 	echo USE_GCC=yes >> /etc/make.conf
 fi
 
-[ "${batch}" = "1" ] && ${SYSRC_CMD} -qf ${path}/etc/make.conf BATCH=no
+[ "${batch}" = "1" ] && /usr/local/cbsd/misc/cbsdsysrc -qf ${path}/etc/make.conf BATCH=no
 
 for i in \${NEEDEDPORTS}; do
 		PORTNAME=\$( make -C \$i -V PORTNAME )
@@ -533,7 +533,7 @@ if [ ${tmux_cpr} -eq 1 ]; then
 		# make sure we have work dir in /tmp for parallel builds
 		[ $( ${GREP_CMD} ^WRKDIRPREFIX= ${path}/etc/make.conf | ${WC_CMD} -l )  = 0 ] && echo WRKDIRPREFIX=/tmp >> ${path}/etc/make.conf
 
-		[ "${batch}" = "1" ] && ${SYSRC_CMD} -qf ${path}/etc/make.conf BATCH=no
+		[ "${batch}" = "1" ] && /usr/local/cbsd/misc/cbsdsysrc -qf ${path}/etc/make.conf BATCH=no
 
 		DT_START=$( ${DATE_CMD} +%s )
 		send_notification -s "[CBSD ${nodename}] cpr ${ver} ${arch} ${repoversion} started" -b "${DT_START}"
