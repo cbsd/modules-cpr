@@ -22,6 +22,47 @@ err()
 	exit $exitval
 }
 
+# convert seconds to human readable time
+displaytime()
+{
+	local T=$1
+	local D=$((T/60/60/24))
+	local H=$((T/60/60%24))
+	local M=$((T/60%60))
+	local S=$((T%60))
+	[ ${D} -gt 0 ] && printf '%d days ' $D
+	[ $H -gt 0 ] && printf '%d hours ' $H
+	[ $M -gt 0 ] && printf '%d minutes ' $M
+	[ $D -gt 0 -o $H -gt 0 -o $M -gt 0 ] && printf 'and '
+	printf '%d seconds\n' $S
+}
+
+
+# st_time should exist
+time_stats()
+{
+	local _diff_time _end_time
+
+	[ -z "${st_time}" ] && return 0
+
+	_end_time=$( date +%s )
+	_diff_time=$(( _end_time - st_time ))
+
+	if [ ${_diff_time} -gt 5 ]; then
+		_diff_time_color="${W1_COLOR}"
+	else
+		_diff_time_color="${H1_COLOR}"
+	fi
+
+	_diff_time=$( displaytime ${_diff_time} )
+
+	_abs__diff_time=$(( _end_time - FULL_ST_TIME ))
+	_abs__diff_time=$( displaytime ${_abs__diff_time} )
+
+	${ECHO} "${*} ${N2_COLOR}in ${_diff_time_COLOR}${_diff_time}${N2_COLOR} ( absolute: ${W1_COLOR}${_abs_diff_time} ${N2_COLOR})${N0_COLOR}"
+}
+
+
 # defaults
 ccache=0
 distcc=0
@@ -53,7 +94,7 @@ truncate -s0 ${status_file}
 truncate -s0 ${LOGFILE} ${BUILDLOG}
 rm -f /tmp/port_log* > /dev/null 2>&1 ||true
 
-PORT_DIRS=$( /bin/cat /tmp/ports_list.txt )
+PORT_DIRS=$( /bin/cat /tmp/ports_list.txt | xargs )
 
 cat > /tmp/fetch-recursive.sh <<EOF
 #!/bin/sh
@@ -76,7 +117,7 @@ find /tmp/usr/ports -type d -name work -exec rm -rf {} \; || true
 
 mkdir -p ${PACKAGES}/All >>${LOGFILE} 2>&1 || err 1 "Cannot create PACKAGES/All directory!"
 
-ALLPORTS=$( /usr/bin/grep -v ^# /tmp/ports_list.txt |/usr/bin/grep . |/usr/bin/wc -l | /usr/bin/awk '{printf $1}')
+ALLPORTS=$( /usr/bin/grep -v ^# /tmp/ports_list.txt | /usr/bin/grep . | /usr/bin/wc -l | /usr/bin/awk '{printf $1}')
 PROGRESS=0
 PASS=0
 FAILED=0
@@ -86,7 +127,7 @@ FAILED_LIST=""
 # config recursive while 
 for dir in $PORT_DIRS; do
 	PROGRESS=$((PROGRESS + 1))
-	pkg info -e $( make -C ${dir} -V PKGNAME) && continue
+	pkg info -e $( make -C ${dir} -V PORTNAME) && continue
 	#this is hack for determine that we have no options anymore - script dup stdout then we can grep for Dialog-Ascii-specific symbol
 #	NOCONF=0
 #	while [ $NOCONF -eq 0 ]; do
@@ -108,12 +149,11 @@ echo "BATCH=yes" >> /etc/make.conf
 sysrc -qf ${status_file} pkg_all="${ALLPORTS}"
 sysrc -qf ${descr_status_file} pkg_all="${ALLPORTS}"
 
-PROGRESS=${ALLPORTS}
+PROGRESS="${ALLPORTS}"
 #set -o errexit
 
-st_date=$( /bin/date +%s )
-sysrc -qf ${status_file} start_time="${st_date}"
-
+FULL_ST_TIME=$( /bin/date +%s )
+sysrc -qf ${status_file} start_time="${FULL_ST_TIME}" full_package_list="${PORT_DIRS}"
 
 for dir in $PORT_DIRS; do
 	PROGRESS=$((PROGRESS - 1))
@@ -131,7 +171,7 @@ for dir in $PORT_DIRS; do
 		continue
 	fi
 
-	#PORTNAME=$( make -C ${dir} -V PKGNAME )
+	st_time=$( /bin/date +%s )
 	PORTNAME=$( make -C ${dir} -V PORTNAME )
 
 	if [ -f /tmp/buildcontinue ]; then
@@ -161,7 +201,7 @@ for dir in $PORT_DIRS; do
 
 	# additional check for package installed
 	pkg info -e ${PORTNAME} >/dev/null 2>&1
-	[ $? -ne 0 ] && ret=1
+	ret=$?
 
 	if [ ${ret} -ne 0 ]; then
 		# debug
@@ -172,35 +212,42 @@ for dir in $PORT_DIRS; do
 		ret=$?
 	fi
 
+	end_time=$( /bin/date +%s )
+	diff_time=$(( end_time - st_time ))
 	rm -rf /tmp/usr/ports
+
+	pkg info -e ${PORTNAME} >/dev/null 2>&1
+	ret=$?
 
 	#set +o errexit
 	if [ $ret -ne 0 ]; then
 		FAILED=$(( FAILED + 1 ))
 		FAILED_LIST="${FAILED_LIST} 1:${dir}"
-		cp ${BUILDLOG} /tmp/log-${PORTNAME}.log
+		cp ${BUILDLOG} /tmp/log-${PORTNAME}.err
+		time_stats "Port failed: ${PORTNAME} (cp ${BUILDLOG} /tmp/log-${PORTNAME}.err)"
 	else
 		# additional check via pkg
-		pkg info -e ${PORTNAME} >/dev/null 2>&1 || {
+		pkg info -e ${PORTNAME} >/dev/null 2>&1
+		_ret=$?
+		if [ ${_ret} -ne 0 ]; then
 			# errcode =1 when no package
 			FAILED=$(( FAILED + 1 ))
 			FAILED_LIST="${FAILED_LIST} 2:${dir}"
 			cp ${BUILDLOG} /tmp/log-${PORTNAME}.log
-		}
+			time_stats "Port done: ${PORTNAME}"
+		fi
 	fi
 
-	sysrc -qf ${status_file} FAILED="${FAILED}" FAILED_LIST="${FAILED_LIST}"
-	sysrc -qf ${descr_status_file} FAILED="${FAILED}" ${descr_status_file} FAILED_LIST="${FAILED_LIST}"
+	sysrc -qf ${status_file} FAILED="${FAILED}" FAILED_LIST="${FAILED_LIST}" BUILD_TIME_${PORTNAME}="${diff_time}"
+	sysrc -qf ${descr_status_file} FAILED="${FAILED}" ${descr_status_file} FAILED_LIST="${FAILED_LIST}" BUILD_TIME_${PORTNAME}="${diff_time}"
 done
 
 end_date=$( /bin/date +%s )
 sysrc -qf ${status_file} end_date="${end_date}"
-
 diff_time=$(( end_date - st_date ))
-run_time=$(( diff_time / 60 ))
-sysrc -qf ${status_file} run_time="${run_time}"
-sysrc -qf ${descr_status_file} run_time="${run_time}"
+sysrc -qf ${status_file} run_time_seconds="${diff_time}"
+sysrc -qf ${descr_status_file} run_time_seconds="${diff_time}"
 
-/bin/rm -f ${status_file} /tmp/cpr_error
+/bin/rm -f /tmp/cpr_error
 
 exit 0

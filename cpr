@@ -338,13 +338,15 @@ EOF
 	${CHROOT_CMD} ${path} /bin/sh << EOF
 service ldconfig start
 mv /etc/make.conf /tmp
+env SIGNATURE_TYPE=none ASSUME_ALWAYS_YES=yes IGNORE_OSVERSION=yes pkg info
 pkg info -e pkg
 ret=\$?
 if [ \${ret} -ne 0 ]; then
 	echo "/usr/ports/ports-mgmt/pkg not installed"
 else
 	env BATCH=no env WRKDIRPREFIX=/tmp make -C /usr/ports/ports-mgmt/pkg clean
-	env BATCH=no env WRKDIRPREFIX=/tmp make -C /usr/ports/ports-mgmt/pkg install
+	env BATCH=no env WRKDIRPREFIX=/tmp make -C /usr/ports/ports-mgmt/pkg deinstall
+	env BATCH=no env WRKDIRPREFIX=/tmp make -C /usr/ports/ports-mgmt/pkg clean
 fi
 mv /tmp/make.conf /etc/
 [ -d /tmp/usr/ports ] && find /tmp/usr/ports -type d -name work -exec rm -rf {} \; > /dev/null 2>&1
@@ -506,49 +508,53 @@ if [ -n "${package_fetch}" ]; then
 	fi
 fi
 
-init_tmux "${jname}-cpr"
+if [ ${tmux_cpr} -eq 1 ]; then
+	init_tmux "${jname}-cpr"
+	${tmuxcmd} list-sessions | ${GREP_CMD} -qwF "${session_name}:"
+	_ret=$?
+else
+	_ret=0
+fi
+
+if [ ${ccache} -eq 1 ]; then
+	if [ ! -x /usr/local/bin/ccache ]; then
+		${ECHO} "Ccache enabled but /usr/local/bin/ccache not found, disable"
+		ccache=0
+	else
+		echo "Go to init ccache"
+		ccache_dir_prefix="cpr"
+		init_ccache_dir
+	fi
+fi
+
+# start action
+mount_temp_dirs
+#[ "${MOUNT_PORTS}" = "0" -a $new -eq 1 ] && ${CHROOT_CMD} ${path} portsnap fetch extract
+prepare_chroot
+
+if [ ${ccache} -eq 1 -o ${distcc} -eq 1 ]; then
+	prepare_make_conf ${makeconf} ${path}/etc/make.conf
+fi
+
+# make sure we have work dir in /tmp for parallel builds
+[ $( ${GREP_CMD} ^WRKDIRPREFIX= ${path}/etc/make.conf | ${WC_CMD} -l )  = 0 ] && echo WRKDIRPREFIX=/tmp >> ${path}/etc/make.conf
+
+[ "${batch}" = "1" ] && /usr/local/cbsd/misc/cbsdsysrc -qf ${path}/etc/make.conf BATCH=no
+
+DT_START=$( ${DATE_CMD} +%s )
+send_notification -s "[CBSD ${nodename}] cpr ${ver} ${arch} ${repoversion} started" -b "${DT_START}"
+${CP_CMD} ${_MYDIR}/cpr_packages.sh ${path}/tmp/cpr_packages.sh
+
+${GREP_CMD} -v "^#" ${pkglist} | ${GREP_CMD} . > ${path}/tmp/ports_list.txt
+
+add_args=
+[ ${ccache} -eq 1 ] && add_args="${add_args} -c 1"
+[ ${distcc} -eq 1 ] && add_args="${add_args} -d 1"
+
+jexec="cbsd jexec jname=${jname} sh /tmp/cpr_packages.sh ${add_args}"
 
 if [ ${tmux_cpr} -eq 1 ]; then
-	${tmuxcmd} list-sessions | ${GREP_CMD} -qwF "${session_name}:"
-	if [ $? -eq 1 ]; then
-
-		if [ ${ccache} -eq 1 ]; then
-			if [ ! -x /usr/local/bin/ccache ]; then
-				${ECHO} "Ccache enabled but /usr/local/bin/ccache not found, disable"
-				ccache=0
-			else
-				echo "Go to init ccache"
-				ccache_dir_prefix="cpr"
-				init_ccache_dir
-			fi
-		fi
-
-		# start action
-		mount_temp_dirs
-		#[ "${MOUNT_PORTS}" = "0" -a $new -eq 1 ] && ${CHROOT_CMD} ${path} portsnap fetch extract
-		prepare_chroot
-
-		if [ ${ccache} -eq 1 -o ${distcc} -eq 1 ]; then
-			prepare_make_conf ${makeconf} ${path}/etc/make.conf
-		fi
-
-		# make sure we have work dir in /tmp for parallel builds
-		[ $( ${GREP_CMD} ^WRKDIRPREFIX= ${path}/etc/make.conf | ${WC_CMD} -l )  = 0 ] && echo WRKDIRPREFIX=/tmp >> ${path}/etc/make.conf
-
-		[ "${batch}" = "1" ] && /usr/local/cbsd/misc/cbsdsysrc -qf ${path}/etc/make.conf BATCH=no
-
-		DT_START=$( ${DATE_CMD} +%s )
-		send_notification -s "[CBSD ${nodename}] cpr ${ver} ${arch} ${repoversion} started" -b "${DT_START}"
-		${CP_CMD} ${_MYDIR}/cpr_packages.sh ${path}/tmp/cpr_packages.sh
-
-		${GREP_CMD} -v "^#" ${pkglist} | ${GREP_CMD} . > ${path}/tmp/ports_list.txt
-
-		add_args=
-		[ ${ccache} -eq 1 ] && add_args="${add_args} -c 1"
-		[ ${distcc} -eq 1 ] && add_args="${add_args} -d 1"
-
-		jexec="cbsd jexec jname=${jname} sh /tmp/cpr_packages.sh ${add_args}"
-
+	if [ ${_ret} -eq 1 ]; then
 		# start action
 		${ECHO} "${N1_COLOR}${tmuxcmd} new -s ${N2_COLOR}${session_name}${N0_COLOR}"
 		${tmuxcmd} new -s "${session_name}" "eval ${jexec}"
@@ -559,20 +565,26 @@ else
 	eval "${jexec}"
 fi
 
-if [ ${tmux_cpr} -eq 1 ]; then
-	sleep 2	# lets wait for store /tmp/cpr_build_status.txt
-	if [ -r ${path}/tmp/cpr_build_status.txt ]; then
-		. ${path}/tmp/cpr_build_status.txt
-		${ECHO} "${N1_COLOR}Progress: ${N2_COLOR}${pkg_left}/${pkg_all} ${N1_COLOR}(Failed: ${W2_COLOR}${FAILED}${N1_COLOR})${N0_COLOR}"
-		${ECHO} "${N1_COLOR}Current build: ${N2_COLOR}${current_build}${N0_COLOR}"
-		${ECHO} "${N1_COLOR}Failed: ${N2_COLOR}${FAILED}/${pkg_all}"
-		[ "${FAILED}" != "0" ] && ${ECHO} "${N1_COLOR}Failed list: ${FAILED_LIST}${N0_COLOR}"
-		exit 0
+sync
+
+echo "${path}/tmp/cpr_build_status.txt test"
+sleep 2	# lets wait for store /tmp/cpr_build_status.txt
+if [ -r ${path}/tmp/cpr_build_status.txt ]; then
+	FAILED=0
+	. "${path}/tmp/cpr_build_status.txt"
+	${ECHO} "${N1_COLOR}Progress: ${N2_COLOR}${pkg_left}/${pkg_all} ${N1_COLOR}(Failed: ${W2_COLOR}${FAILED}${N1_COLOR})${N0_COLOR}"
+	${ECHO} "${N1_COLOR}Current build: ${N2_COLOR}${current_build}${N0_COLOR}"
+	${ECHO} "${N1_COLOR}Failed: ${N2_COLOR}${FAILED}/${pkg_all}"
+	if [ "${FAILED}" != "0" ]; then
+		find ${path}/tmp/ -name *.err -exec basename {} \; | while read _f; do
+			echo "=== tail -n40 ${_f} ==="
+			tail -n40 ${path}/tmp/${_f}
+			echo "=== tail -n40 ${_f} ==="
+		done
+		${ECHO} "${N1_COLOR}Failed list: ${FAILED_LIST}${N0_COLOR}"
+		exit 1
 	fi
 fi
 
-#if [ $tmux_cpr -ne 1 ]; then
-	post_action
-#fi
-
+post_action
 exit 0
