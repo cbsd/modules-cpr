@@ -496,11 +496,13 @@ fi
 [ -n "${opackage_fetch}" ] && package_fetch="${opackage_fetch}"
 if [ -n "${package_fetch}" ]; then
 	${ECHO} "${N1_COLOR}Prefetch packages: ${N2_COLOR}${package_fetch}${N0_COLOR}"
-	pkg mode=install jname="${jname}" ${package_fetch} >> /tmp/pkg.txt
+	pkg mode=install jname="${jname}" ${package_fetch} >> /tmp/pkg.txt 2>&1
 	ret=$?
 	echo "RET: ${ret}"
 	if [ ${ret} -ne 0 ]; then
-		err 1 "${W1_COLOR}Error: ${N2_COLOR}pkg mode=install jname=\"${jname}\" ${package_fetch}${N0_COLOR}"
+		${ECHO} "${W1_COLOR}Error: ${N2_COLOR}pkg mode=install jname=\"${jname}\" ${package_fetch}${N0_COLOR}"
+		${CAT_CMD} /tmp/pkg.txt
+		exit 1
 	fi
 fi
 

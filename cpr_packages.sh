@@ -121,7 +121,6 @@ for dir in $PORT_DIRS; do
 	# skip if ports already registered
 
 	sysrc -qf ${status_file} current_build="${dir}" pkg_left="${PROGRESS}"
-
 	sysrc -qf ${descr_status_file} current_build="${dir}" pkg_left="${PROGRESS}"
 
 	if [ ! -d "${dir}" ]; then
@@ -156,7 +155,7 @@ for dir in $PORT_DIRS; do
 	#read p
 
 	/bin/rm -f ${BUILDLOG}
-	make -C ${dir} install |tee ${BUILDLOG}
+	make -C ${dir} install | tee ${BUILDLOG}
 	ret=$?
 
 
@@ -166,10 +165,10 @@ for dir in $PORT_DIRS; do
 
 	if [ ${ret} -ne 0 ]; then
 		# debug
-		echo "Second attemplt for ${dir}" >> /tmp/second.txt
+		echo "Second attempt for ${dir}" >> /tmp/second.txt
 		# second attempt
 		make -C ${dir} clean
-		/usr/bin/env MAKE_JOBS_UNSAFE=yes /usr/bin/env DISABLE_MAKE_JOBS=yes make -C ${dir} install |tee ${BUILDLOG}
+		/usr/bin/env MAKE_JOBS_UNSAFE=yes /usr/bin/env DISABLE_MAKE_JOBS=yes make -C ${dir} install | tee ${BUILDLOG}
 		ret=$?
 	fi
 
@@ -190,10 +189,8 @@ for dir in $PORT_DIRS; do
 		}
 	fi
 
-	sysrc -qf ${status_file} FAILED="${FAILED}"
-	sysrc -qf ${status_file} FAILED_LIST="${FAILED_LIST}"
-	sysrc -qf ${descr_status_file} FAILED="${FAILED}"
-	sysrc -qf ${descr_status_file} FAILED_LIST="${FAILED_LIST}"
+	sysrc -qf ${status_file} FAILED="${FAILED}" FAILED_LIST="${FAILED_LIST}"
+	sysrc -qf ${descr_status_file} FAILED="${FAILED}" ${descr_status_file} FAILED_LIST="${FAILED_LIST}"
 done
 
 end_date=$( /bin/date +%s )
