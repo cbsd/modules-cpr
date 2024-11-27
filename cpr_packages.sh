@@ -195,6 +195,7 @@ for dir in $PORT_DIRS; do
 	#read p
 
 	/bin/rm -f ${BUILDLOG}
+	make -C ${dir} deinstall > /dev/null 2>&1 || true
 	make -C ${dir} install | tee ${BUILDLOG}
 	ret=$?
 
@@ -208,6 +209,7 @@ for dir in $PORT_DIRS; do
 		echo "Second attempt for ${dir}" >> /tmp/second.txt
 		# second attempt
 		make -C ${dir} clean
+		make -C ${dir} deinstall > /dev/null 2>&1 || true
 		/usr/bin/env MAKE_JOBS_UNSAFE=yes /usr/bin/env DISABLE_MAKE_JOBS=yes make -C ${dir} install | tee ${BUILDLOG}
 		ret=$?
 	fi
