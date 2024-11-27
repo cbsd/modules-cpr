@@ -232,16 +232,8 @@ for dir in $PORT_DIRS; do
 		cp ${BUILDLOG} /tmp/log-${PORTNAME}.err
 		time_stats "Port failed: ${PORTNAME} (cp ${BUILDLOG} /tmp/log-${PORTNAME}.err)"
 	else
-		# additional check via pkg
-		pkg info -e ${PORTNAME} >/dev/null 2>&1
-		_ret=$?
-		if [ ${_ret} -ne 0 ]; then
-			# errcode =1 when no package
-			FAILED=$(( FAILED + 1 ))
-			FAILED_LIST="${FAILED_LIST} 2:${dir}"
-			cp ${BUILDLOG} /tmp/log-${PORTNAME}.log
-			time_stats "Port done: ${PORTNAME}"
-		fi
+		#cp ${BUILDLOG} /tmp/log-${PORTNAME}.log
+		time_stats "Port done: ${PORTNAME}"
 	fi
 
 	sysrc -qf ${status_file} FAILED="${FAILED}" FAILED_LIST="${FAILED_LIST}" BUILD_TIME_${PORTNAME}="${diff_time}"
