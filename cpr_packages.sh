@@ -196,13 +196,14 @@ for dir in $PORT_DIRS; do
 
 	/bin/rm -f ${BUILDLOG}
 	make -C ${dir} deinstall > /dev/null 2>&1 || true
-	make -C ${dir} install | tee ${BUILDLOG}
+	make -C ${dir} install >> ${BUILDLOG}
 	ret=$?
 
-
-	# additional check for package installed
-	pkg info -e ${PORTNAME} >/dev/null 2>&1
-	ret=$?
+	if [ ${ret} -ne 0 ]; then
+		# additional check for package installed
+		pkg info -e ${PORTNAME} >/dev/null 2>&1
+		ret=$?
+	fi
 
 	if [ ${ret} -ne 0 ]; then
 		# debug
@@ -210,7 +211,7 @@ for dir in $PORT_DIRS; do
 		# second attempt
 		make -C ${dir} clean
 		make -C ${dir} deinstall > /dev/null 2>&1 || true
-		/usr/bin/env MAKE_JOBS_UNSAFE=yes /usr/bin/env DISABLE_MAKE_JOBS=yes make -C ${dir} install | tee ${BUILDLOG}
+		/usr/bin/env MAKE_JOBS_UNSAFE=yes /usr/bin/env DISABLE_MAKE_JOBS=yes make -C ${dir} install >> ${BUILDLOG}
 		ret=$?
 	fi
 
@@ -218,11 +219,14 @@ for dir in $PORT_DIRS; do
 	diff_time=$(( end_time - st_time ))
 	rm -rf /tmp/usr/ports
 
-	pkg info -e ${PORTNAME} >/dev/null 2>&1
-	ret=$?
+	if [ ${ret} -ne 0 ]; then
+		# additional check for package installed
+		pkg info -e ${PORTNAME} >/dev/null 2>&1
+		ret=$?
+	fi
 
 	#set +o errexit
-	if [ $ret -ne 0 ]; then
+	if [ ${ret} -ne 0 ]; then
 		FAILED=$(( FAILED + 1 ))
 		FAILED_LIST="${FAILED_LIST} 1:${dir}"
 		cp ${BUILDLOG} /tmp/log-${PORTNAME}.err
