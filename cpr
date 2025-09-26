@@ -458,7 +458,12 @@ if [ $? -eq 0 ]; then
 
 	${ECHO} "${N1_COLOR}Obtain new jail: ${N2_COLOR}${jname}${N0_COLOR}"
 
-	up cbsdfile=/tmp/cbsdfile.$$/CBSDfile || err 1 "Error jail creation via tpl ${tpl}"
+	if [ -n "${over}" ]; then
+		ver="${over}"
+	else
+		ver="native"
+	fi
+	up cbsdfile=/tmp/cbsdfile.$$/CBSDfile ver=${ver} || err 1 "Error jail creation via tpl ${tpl}"
 
 	pkg mode=update jname=${jname} || true
 	pkg mode=bootstrap jname=${jname} || true
