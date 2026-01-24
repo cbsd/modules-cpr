@@ -73,6 +73,10 @@ jname=
 [ -n "${autoremove}" ] && oautoremove="${autoremove}"
 [ -z "${autoremove}" ] && autoremove=0
 
+if [ -n "${omakeconf}" ]; then
+	[ ! -r "${omakeconf}" ] && err 1 "${N1_COLOR}${CIX_APP} error: custom makeconf file not readable: ${N2_COLOR}${omakeconf}${N1_COLOR}"
+fi
+
 . ${subrdir}/distccache.subr
 . ${subrdir}/mailtools.subr
 
